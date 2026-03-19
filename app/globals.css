@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --craft-bg: #0B0F15;
+  --craft-surface: #161D27;
+  --craft-surface2: #1B2432;
+  --craft-border: #2A3545;
+  --craft-accent: #5BA4F5;
+  --craft-green: #42C774;
+  --craft-purple: #C9A0FF;
+  --craft-orange: #FFB155;
+  --craft-red: #FF7B72;
+}
+
+body {
+  background: var(--craft-bg);
+}
+
+/* Smooth scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--craft-border); border-radius: 3px; }
