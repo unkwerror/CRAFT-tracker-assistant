@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import WidgetDebugBadge from './WidgetDebugBadge';
 
 const COLUMNS = [
   { key: 'newLead',       label: 'Новый лид',     color: '#5BA4F5', bg: 'bg-craft-accent/10  border-craft-accent/30' },
@@ -254,6 +255,19 @@ export default function CrmKanban({ trackerConnected = false }) {
           </motion.button>
         </div>
       </div>
+      <div className="px-4 pt-3">
+        <WidgetDebugBadge
+          title="CRM Kanban"
+          endpoint="/api/tracker/queues/CRM + /api/tracker/issues/:key/transitions + /api/tracker/issues/:key/comments + /api/tracker/issues/:key/changelog + /api/tracker/issues/:key/attachments"
+          metrics={{
+            totalTasks: tasks.length,
+            mappedColumns: COLUMNS.length,
+            otherTasks: otherTasks.length,
+            selectedLead: selectedTask?.key || '—',
+          }}
+          note="DnD: native HTML5 внутри Kanban + dnd-kit handle на уровне виджетов"
+        />
+      </div>
 
       <AnimatePresence initial={false}>
         {showNewLead && (
@@ -384,6 +398,9 @@ function LeadDetailModal({ task, onClose, onTransition, onUpdated, getTransition
   const [commentSending, setCommentSending] = useState(false);
   const [history, setHistory] = useState(null);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [attachments, setAttachments] = useState(null);
+  const [attachmentsLoading, setAttachmentsLoading] = useState(false);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
 
   useEffect(() => {
     setLoadingT(true);
@@ -408,6 +425,7 @@ function LeadDetailModal({ task, onClose, onTransition, onUpdated, getTransition
     { key: 'overview', label: 'Обзор' },
     { key: 'comments', label: 'Комментарии' },
     { key: 'history', label: 'История' },
+    { key: 'attachments', label: 'Вложения' },
   ];
 
   const loadComments = useCallback(async () => {
@@ -438,6 +456,20 @@ function LeadDetailModal({ task, onClose, onTransition, onUpdated, getTransition
     }
   }, [task.key]);
 
+  const loadAttachments = useCallback(async () => {
+    setAttachmentsLoading(true);
+    try {
+      const r = await fetch(`/api/tracker/issues/${task.key}/attachments`);
+      const data = await r.json();
+      if (data.error) throw new Error(data.error);
+      setAttachments(Array.isArray(data.attachments) ? data.attachments : []);
+    } catch {
+      setAttachments([]);
+    } finally {
+      setAttachmentsLoading(false);
+    }
+  }, [task.key]);
+
   useEffect(() => {
     if (tab === 'comments' && comments === null && !commentsLoading) {
       loadComments();
@@ -449,6 +481,12 @@ function LeadDetailModal({ task, onClose, onTransition, onUpdated, getTransition
       loadHistory();
     }
   }, [tab, history, historyLoading, loadHistory]);
+
+  useEffect(() => {
+    if (tab === 'attachments' && attachments === null && !attachmentsLoading) {
+      loadAttachments();
+    }
+  }, [tab, attachments, attachmentsLoading, loadAttachments]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -496,6 +534,29 @@ function LeadDetailModal({ task, onClose, onTransition, onUpdated, getTransition
       alert(`Ошибка комментария: ${e.message}`);
     } finally {
       setCommentSending(false);
+    }
+  };
+
+  const handleUploadAttachment = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setUploadingAttachment(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const r = await fetch(`/api/tracker/issues/${task.key}/attachments`, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await r.json();
+      if (data.error) throw new Error(data.error);
+      await loadAttachments();
+      onUpdated?.();
+    } catch (e) {
+      alert(`Ошибка загрузки файла: ${e.message}`);
+    } finally {
+      setUploadingAttachment(false);
     }
   };
 
@@ -702,8 +763,48 @@ function LeadDetailModal({ task, onClose, onTransition, onUpdated, getTransition
               </div>
             </div>
           </div>
-        ) : (
+        ) : tab === 'history' ? (
           <div>{renderHistory()}</div>
+        ) : (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-2xs text-white/25">Файлы задачи</div>
+              <label className={`text-2xs px-3 py-1.5 rounded-lg border border-white/[0.08] transition-colors ${
+                uploadingAttachment
+                  ? 'text-white/30 bg-white/[0.03]'
+                  : 'text-craft-accent bg-craft-accent/10 hover:bg-craft-accent/20 cursor-pointer'
+              }`}>
+                {uploadingAttachment ? 'Загрузка...' : 'Загрузить файл'}
+                <input type="file" className="hidden" onChange={handleUploadAttachment} disabled={uploadingAttachment} />
+              </label>
+            </div>
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {attachmentsLoading ? (
+                <div className="text-2xs text-white/25">Загрузка вложений...</div>
+              ) : !attachments || attachments.length === 0 ? (
+                <div className="text-2xs text-white/20">Вложений пока нет</div>
+              ) : (
+                attachments.map((a, i) => (
+                  <div key={a.id || `${a.url || 'f'}-${i}`} className="bg-white/[0.03] border border-white/[0.05] rounded-lg p-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <a
+                        href={a.url || a.content || '#'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-2xs text-craft-accent hover:underline truncate"
+                      >
+                        {a.name || a.filename || `Файл ${i + 1}`}
+                      </a>
+                      <span className="text-2xs text-white/20 shrink-0">{formatBytes(a.size || a.bytes || 0)}</span>
+                    </div>
+                    <div className="text-2xs text-white/25 mt-1">
+                      {(a.createdBy || a.author || 'Автор')} • {a.createdAt ? new Date(a.createdAt).toLocaleString('ru-RU') : '—'}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         )}
 
         <div className="mt-4 pt-3 border-t border-craft-border">
@@ -713,6 +814,14 @@ function LeadDetailModal({ task, onClose, onTransition, onUpdated, getTransition
       </motion.div>
     </motion.div>
   );
+}
+
+function formatBytes(size) {
+  const n = Number(size || 0);
+  if (!Number.isFinite(n) || n <= 0) return '—';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function NewLeadForm({ onCreated, onCancel }) {

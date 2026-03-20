@@ -1,6 +1,7 @@
 'use client';
 import { useMemo, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import WidgetDebugBadge from './WidgetDebugBadge';
 
 const TABS = [
   { key: 'conversion', label: 'Воронка' },
@@ -41,6 +42,7 @@ export default function CrmAnalytics({ trackerConnected = false }) {
   const [tab, setTab] = useState('conversion');
   const [cohort, setCohort] = useState('month');
   const [manager, setManager] = useState('');
+  const [fetchUrl, setFetchUrl] = useState('/api/analytics/crm?ml=true&changelog=true&cohort=month');
 
   useEffect(() => {
     if (!trackerConnected) {
@@ -55,7 +57,9 @@ export default function CrmAnalytics({ trackerConnected = false }) {
       cohort,
     });
     if (manager) q.set('managerId', manager);
-    fetch(`/api/analytics/crm?${q.toString()}`)
+    const url = `/api/analytics/crm?${q.toString()}`;
+    setFetchUrl(url);
+    fetch(url)
       .then((r) => r.json())
       .then((d) => {
         if (d.error) throw new Error(d.error);
@@ -161,6 +165,18 @@ export default function CrmAnalytics({ trackerConnected = false }) {
       </div>
 
       <div className="p-5">
+        <WidgetDebugBadge
+          title="CRM Analytics"
+          endpoint={fetchUrl}
+          metrics={{
+            leadsCount: data?.leadsCount,
+            conversion: analytics?.conversion?.length || 0,
+            velocity: (analytics?.velocityChangelog || analytics?.velocity || []).length,
+            scores: analytics?.scores?.length || 0,
+            mlScores: analytics?.mlScores?.length || 0,
+            anomalies: analytics?.anomalies?.length || 0,
+          }}
+        />
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={tab}

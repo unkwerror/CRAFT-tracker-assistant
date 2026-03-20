@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Canvas, useFrame } from '@react-three/fiber';
+import WidgetDebugBadge from './WidgetDebugBadge';
 
 const FUNNEL_STAGES = [
   { key: 'newLead',       label: 'Новый лид',     color: '#5BA4F5' },
@@ -98,6 +99,18 @@ export default function FunnelChart({ trackerConnected = false }) {
           </motion.button>
           <span className="text-[10px] text-white/20 tabular-nums">{data.allCount} всего</span>
         </div>
+      </div>
+      <div className="px-4 pt-3">
+        <WidgetDebugBadge
+          title="CRM Funnel"
+          endpoint="/api/tracker/queues/CRM"
+          metrics={{
+            allCount: data?.allCount || 0,
+            mappedCount: data?.total || 0,
+            postponed: data?.postponed || 0,
+            rejected: data?.rejected || 0,
+          }}
+        />
       </div>
 
       <div className="h-28 border-b border-craft-border/70 bg-craft-bg/30">

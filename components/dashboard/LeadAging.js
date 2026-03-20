@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { ResponsiveHeatMap } from '@nivo/heatmap';
+import WidgetDebugBadge from './WidgetDebugBadge';
 
 export default function LeadAging({ trackerConnected = false }) {
   const [leads, setLeads] = useState([]);
@@ -40,6 +41,17 @@ export default function LeadAging({ trackerConnected = false }) {
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-craft-border">
         <h2 className="text-[13px] font-display font-medium tracking-tight">Застрявшие лиды</h2>
         <span className="text-[10px] text-white/20">{leads.length} шт</span>
+      </div>
+      <div className="px-4 pt-3">
+        <WidgetDebugBadge
+          title="Lead Aging"
+          endpoint="/api/analytics/crm"
+          metrics={{
+            anomalies: leads.length,
+            heatmapRows: buildHeatmapData(leads).length,
+          }}
+          note="Используется analytics.anomalies из CRM analytics endpoint"
+        />
       </div>
 
       {leads.length === 0 ? (

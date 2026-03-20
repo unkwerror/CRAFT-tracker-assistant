@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { DndContext, PointerSensor, TouchSensor, KeyboardSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy, arrayMove, sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable';
@@ -90,6 +90,8 @@ const WIDGET_REGISTRY = {
 
 };
 
+const WIDGET_FRAME_MODES = ['strict', 'neo', 'y2k'];
+
 export { WIDGET_REGISTRY };
 
 export default function DashboardShell({ user }) {
@@ -103,6 +105,7 @@ export default function DashboardShell({ user }) {
   const [showPicker, setShowPicker] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [activeDragId, setActiveDragId] = useState(null);
+  const [widgetFrames, setWidgetFrames] = useState({});
 
   useEffect(() => {
     let cancelled = false;
@@ -147,6 +150,23 @@ export default function DashboardShell({ user }) {
     persistLayout(defaults);
   }, [enabledKeys, fallback.widgets, persistLayout]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem('dashboard-widget-frames-v1');
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') setWidgetFrames(parsed);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem('dashboard-widget-frames-v1', JSON.stringify(widgetFrames));
+    } catch {}
+  }, [widgetFrames]);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 6 } }),
@@ -168,6 +188,14 @@ export default function DashboardShell({ user }) {
   }, [widgets, updateWidgets]);
 
   const onDndCancel = useCallback(() => setActiveDragId(null), []);
+  const cycleWidgetFrame = useCallback((id) => {
+    setWidgetFrames((prev) => {
+      const current = prev[id] || 'strict';
+      const idx = WIDGET_FRAME_MODES.indexOf(current);
+      const next = WIDGET_FRAME_MODES[(idx + 1) % WIDGET_FRAME_MODES.length];
+      return { ...prev, [id]: next };
+    });
+  }, []);
 
   const available = enabledKeys
     .map(key => WIDGET_REGISTRY[key] ? [key, WIDGET_REGISTRY[key]] : null)
@@ -185,6 +213,13 @@ export default function DashboardShell({ user }) {
     show: { opacity: 1, y: 0, transition: { duration: 0.34, ease: [0.16, 1, 0.3, 1] } },
     exit: { opacity: 0, y: -10, transition: { duration: 0.18 } },
   };
+  const shouldRenderFiller = useMemo(() => {
+    const units = widgets.reduce((sum, id) => {
+      const size = WIDGET_REGISTRY[id]?.size;
+      return sum + (size === 'full' ? 2 : 1);
+    }, 0);
+    return units % 2 === 1;
+  }, [widgets]);
 
   return (
     <div className="min-h-screen pb-8">
@@ -264,8 +299,9 @@ export default function DashboardShell({ user }) {
               variants={container}
               initial="hidden"
               animate="show"
-              className="grid grid-cols-1 lg:grid-cols-2 gap-3"
+              className="grid grid-cols-1 lg:grid-cols-2 gap-3 relative"
             >
+              <div className="pointer-events-none absolute inset-0 neo-grid-ornaments" />
               <AnimatePresence>
                 {widgets.map((id) => {
                   const w = WIDGET_REGISTRY[id];
@@ -277,11 +313,26 @@ export default function DashboardShell({ user }) {
                       full={w.size === 'full'}
                       isActive={activeDragId === id}
                       variants={item}
+                      frame={widgetFrames[id] || 'strict'}
+                      onCycleFrame={() => cycleWidgetFrame(id)}
                     >
                       {w.render(widgetProps)}
                     </SortableWidget>
                   );
                 })}
+                {shouldRenderFiller && (
+                  <motion.div
+                    key="ambient-filler"
+                    variants={item}
+                    className="rounded-xl border border-white/[0.08] bg-craft-surface/65 min-h-[200px] relative overflow-hidden neo-ambient-filler"
+                    aria-hidden
+                  >
+                    <div className="absolute inset-0 sigil-lines" />
+                    <div className="absolute bottom-3 left-3 text-[10px] tracking-[0.14em] uppercase text-white/25 font-medium">
+                      Signal Layer
+                    </div>
+                  </motion.div>
+                )}
               </AnimatePresence>
             </motion.div>
           </SortableContext>
@@ -316,13 +367,19 @@ export default function DashboardShell({ user }) {
   );
 }
 
-function SortableWidget({ id, full, isActive, children, variants }) {
+function SortableWidget({ id, full, isActive, children, variants, frame = 'strict', onCycleFrame }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id });
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     zIndex: isDragging ? 30 : 'auto',
   };
+  const frameClass =
+    frame === 'neo'
+      ? 'neo-widget-frame'
+      : frame === 'y2k'
+        ? 'y2k-widget-frame'
+        : 'strict-widget-frame';
   return (
     <motion.div
       ref={setNodeRef}
@@ -330,7 +387,7 @@ function SortableWidget({ id, full, isActive, children, variants }) {
       variants={variants}
       exit="exit"
       layout
-      className={`${full ? 'lg:col-span-2' : ''} relative ${
+      className={`${full ? 'lg:col-span-2' : ''} relative overflow-hidden rounded-xl ${frameClass} ${
         isDragging || isActive ? 'opacity-70 scale-[0.99] ring-2 ring-craft-accent/25 rounded-xl' : ''
       }`}
     >
@@ -346,6 +403,15 @@ function SortableWidget({ id, full, isActive, children, variants }) {
           <path d="M5 3h6M5 8h6M5 13h6" />
         </svg>
       </button>
+      <button
+        onClick={onCycleFrame}
+        className="absolute left-2 top-2 z-20 h-6 px-2 rounded-md bg-black/25 border border-white/[0.08] text-[10px] uppercase tracking-[0.12em] text-white/35 hover:text-white/65 hover:bg-black/35"
+        title="Сменить стиль виджета"
+        aria-label="Сменить стиль виджета"
+      >
+        {frame}
+      </button>
+      <div className="pointer-events-none absolute inset-0 widget-frame-overlay" />
       {children}
     </motion.div>
   );

@@ -1,11 +1,14 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { ResponsiveLine } from '@nivo/line';
 import { motion } from 'framer-motion';
+import WidgetDebugBadge from './WidgetDebugBadge';
 
 export default function CrmTimeline({ trackerConnected = false }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const chartWrapRef = useRef(null);
+  const [chartWidth, setChartWidth] = useState(0);
 
   useEffect(() => {
     if (!trackerConnected) { setLoading(false); return; }
@@ -23,6 +26,17 @@ export default function CrmTimeline({ trackerConnected = false }) {
       .catch(() => setEvents([]))
       .finally(() => setLoading(false));
   }, [trackerConnected]);
+
+  useEffect(() => {
+    if (!chartWrapRef.current || typeof ResizeObserver === 'undefined') return;
+    const node = chartWrapRef.current;
+    const observer = new ResizeObserver((entries) => {
+      const w = entries?.[0]?.contentRect?.width || 0;
+      setChartWidth(Math.round(w));
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   if (!trackerConnected) {
     return (
@@ -49,6 +63,22 @@ export default function CrmTimeline({ trackerConnected = false }) {
   }
 
   const pulseSeries = buildPulseSeries(events, 14);
+  const yMax = Math.max(...pulseSeries.map((p) => Number(p.value || 0)), 1);
+  const yTicks = useMemo(() => buildYAxisTicks(yMax), [yMax]);
+  const isCompact = chartWidth > 0 && chartWidth < 420;
+  const xTickEvery = isCompact ? 3 : 2;
+  const xTickValues = pulseSeries
+    .filter((_, idx) => idx % xTickEvery === 0 || idx === pulseSeries.length - 1)
+    .map((p) => p.label);
+  const lineData = [
+    {
+      id: 'pulse',
+      data: pulseSeries.map((p) => ({
+        x: p.label,
+        y: p.value,
+      })),
+    },
+  ];
 
   return (
     <div className="bg-craft-surface border border-craft-border rounded-2xl overflow-hidden hover:border-craft-border2 transition-colors">
@@ -57,37 +87,55 @@ export default function CrmTimeline({ trackerConnected = false }) {
       </div>
 
       <div className="px-4 pt-3 pb-1 border-b border-craft-border/70">
+        <WidgetDebugBadge
+          title="CRM Timeline"
+          endpoint="/api/tracker/queues/CRM"
+          metrics={{
+            sourceTasks: events.length,
+            pulseDays: pulseSeries.length,
+            yMax,
+            chartWidth,
+          }}
+          note="Temporal Pulse строится из updatedAt последних CRM задач"
+        />
         <div className="text-2xs text-white/25 mb-1.5">Temporal Pulse (активность по дням)</div>
-        <div className="h-32 bg-craft-bg/35 rounded-lg border border-white/[0.05] overflow-hidden">
+        <div ref={chartWrapRef} className="h-36 sm:h-40 bg-craft-bg/35 rounded-lg border border-white/[0.05] overflow-hidden">
           <ResponsiveLine
-            data={[
-              {
-                id: 'pulse',
-                data: pulseSeries.map((p) => ({ x: p.label, y: p.value })),
-              },
-            ]}
-            margin={{ top: 12, right: 12, bottom: 28, left: 24 }}
+            data={lineData}
+            margin={{ top: 14, right: 14, bottom: 32, left: isCompact ? 34 : 44 }}
             xScale={{ type: 'point' }}
-            yScale={{ type: 'linear', min: 0, max: 'auto' }}
+            yScale={{ type: 'linear', min: 0, max: yMax }}
             colors={['#6DD8E0']}
             lineWidth={2}
-            pointSize={7}
+            pointSize={isCompact ? 5 : 6}
             pointColor="#6DD8E0"
             pointBorderWidth={1}
             pointBorderColor="#161616"
             useMesh
             enableGridX={false}
-            gridYValues={4}
+            gridYValues={yTicks}
             axisTop={null}
             axisRight={null}
-            axisBottom={{ tickSize: 0, tickPadding: 8, tickRotation: 0, legend: '', legendOffset: 0, legendPosition: 'middle' }}
-            axisLeft={{ tickSize: 0, tickPadding: 6, tickRotation: 0, legend: '', legendOffset: 0, legendPosition: 'middle' }}
+            axisBottom={{
+              tickSize: 0,
+              tickPadding: 8,
+              tickRotation: 0,
+              tickValues: xTickValues,
+              format: (v) => String(v),
+            }}
+            axisLeft={{
+              tickSize: 0,
+              tickPadding: 6,
+              tickRotation: 0,
+              tickValues: yTicks,
+              format: (v) => `${v}`,
+            }}
             enableSlices={false}
             curve="monotoneX"
             enableArea
-            areaOpacity={0.16}
+            areaOpacity={0.18}
             theme={{
-              axis: { ticks: { text: { fill: 'rgba(255,255,255,0.28)', fontSize: 10 } } },
+              axis: { ticks: { text: { fill: 'rgba(255,255,255,0.32)', fontSize: isCompact ? 9 : 10 } } },
               grid: { line: { stroke: 'rgba(255,255,255,0.06)', strokeWidth: 1 } },
               crosshair: { line: { stroke: 'rgba(255,255,255,0.2)', strokeWidth: 1 } },
               tooltip: { container: { background: '#151515', color: '#ddd', fontSize: 11, border: '1px solid #2a2a2a' } },
@@ -171,4 +219,14 @@ function buildPulseSeries(events, days = 14) {
     const d = new Date(key);
     return { key, value, label: d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) };
   });
+}
+
+function buildYAxisTicks(maxValue) {
+  const max = Math.max(1, Math.ceil(maxValue));
+  const targetSteps = max <= 4 ? max : 4;
+  const step = Math.max(1, Math.ceil(max / targetSteps));
+  const out = [0];
+  for (let v = step; v <= max; v += step) out.push(v);
+  if (out[out.length - 1] !== max) out.push(max);
+  return out;
 }
