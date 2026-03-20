@@ -1,5 +1,6 @@
 import { requireAuth, jsonOk, jsonError } from '@/lib/api-helpers.mjs';
 import { TrackerClient } from '@/lib/tracker.mjs';
+import { insertCrmEvent } from '@/lib/db.mjs';
 
 export async function GET(_request, { params }) {
   const auth = await requireAuth();
@@ -49,7 +50,8 @@ export async function POST(request, { params }) {
   const issueKey = params?.key;
   if (!issueKey) return jsonError('Issue key required', 400);
 
-  const { transitionId, comment } = await request.json();
+  const body = await request.json();
+  const { transitionId, comment } = body || {};
   if (!transitionId) return jsonError('transitionId is required', 400);
 
   const tracker = new TrackerClient(session.tracker_token, process.env.TRACKER_ORG_ID);
@@ -57,6 +59,18 @@ export async function POST(request, { params }) {
 
   try {
     const result = await tracker.executeTransition(issueKey, transitionId, comment);
+
+    try {
+      const userId = session?.uid ?? session?.userId ?? null;
+      await insertCrmEvent(issueKey, 'transition', userId, {
+        transitionId,
+        from: body?.from || null,
+        to: body?.to || null,
+      });
+    } catch (e) {
+      console.error('Failed to log CRM event:', e.message);
+    }
+
     return jsonOk({ success: true, issue: result });
   } catch (error) {
     console.error('Transition execution error:', error.message);

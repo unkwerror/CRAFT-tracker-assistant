@@ -1,5 +1,6 @@
 import { requireAuth, hasPermission, jsonOk, jsonError } from '@/lib/api-helpers.mjs';
 import { TrackerClient } from '@/lib/tracker.mjs';
+import { insertCrmEvent } from '@/lib/db.mjs';
 
 const QUEUE_WRITE_PERMISSION = {
   CRM: 'crm:write', PROJ: 'proj:write', DOCS: 'docs:write', HR: 'hr:write',
@@ -28,6 +29,14 @@ export async function POST(request) {
     }
 
     const issue = await tracker.createIssue({ queue, summary, description, type, priority, assignee, fields });
+
+    try {
+      const userId = session?.uid ?? session?.userId ?? null;
+      await insertCrmEvent(issue.key, 'created', userId, { queue, summary });
+    } catch (e) {
+      console.error('Failed to log CRM event:', e.message);
+    }
+
     return jsonOk({
       success: true,
       issue: {

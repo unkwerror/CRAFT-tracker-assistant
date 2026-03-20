@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { DndContext, PointerSensor, TouchSensor, KeyboardSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
+import { DndContext, DragOverlay, PointerSensor, TouchSensor, KeyboardSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy, arrayMove, sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { ROLE_DASHBOARD } from '@/lib/dashboard-config.mjs';
@@ -168,8 +168,8 @@ export default function DashboardShell({ user }) {
   }, [widgetFrames]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 6 } }),
+    useSensor(PointerSensor, { activationConstraint: { delay: 300, tolerance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 300, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
@@ -336,6 +336,13 @@ export default function DashboardShell({ user }) {
               </AnimatePresence>
             </motion.div>
           </SortableContext>
+          <DragOverlay dropAnimation={null}>
+            {activeDragId && WIDGET_REGISTRY[activeDragId] ? (
+              <div className={`${WIDGET_REGISTRY[activeDragId].size === 'full' ? 'lg:col-span-2' : ''} rounded-xl bg-craft-surface/80 backdrop-blur-sm border border-craft-accent/20 shadow-2xl shadow-craft-accent/10 p-4 opacity-90`}>
+                <div className="text-2xs text-craft-accent/60 font-display">{WIDGET_REGISTRY[activeDragId].title}</div>
+              </div>
+            ) : null}
+          </DragOverlay>
         </DndContext>
       )}
 
@@ -387,8 +394,8 @@ function SortableWidget({ id, full, isActive, children, variants, frame = 'stric
       variants={variants}
       exit="exit"
       layout
-      className={`${full ? 'lg:col-span-2' : ''} relative overflow-hidden rounded-xl ${frameClass} ${
-        isDragging || isActive ? 'opacity-70 scale-[0.99] ring-2 ring-craft-accent/25 rounded-xl' : ''
+      className={`${full ? 'lg:col-span-2' : ''} relative rounded-xl ${frameClass} ${
+        isDragging ? 'opacity-30 scale-[0.98]' : isActive ? 'ring-2 ring-craft-accent/25' : ''
       }`}
     >
       <button

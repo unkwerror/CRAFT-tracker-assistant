@@ -27,7 +27,7 @@ export default function LoginPage() {
   }, []);
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden" style={{ background: '#0e0e0e' }}>
+    <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden bg-craft-bg">
       {/* Background gradient */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full opacity-[0.03]"
