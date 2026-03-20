@@ -330,7 +330,7 @@ function SortableWidget({ id, full, isActive, children, variants }) {
       variants={variants}
       exit="exit"
       layout
-      className={`${full ? 'lg:col-span-2' : ''} ${
+      className={`${full ? 'lg:col-span-2' : ''} relative ${
         isDragging || isActive ? 'opacity-70 scale-[0.99] ring-2 ring-craft-accent/25 rounded-xl' : ''
       }`}
     >

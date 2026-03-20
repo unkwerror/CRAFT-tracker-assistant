@@ -59,15 +59,16 @@ export default function CrmAnalytics({ trackerConnected = false }) {
       .then((r) => r.json())
       .then((d) => {
         if (d.error) throw new Error(d.error);
-        setData(d.analytics || null);
+        setData(d || null);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [trackerConnected, cohort, manager]);
 
+  const analytics = data?.analytics || null;
   const managerOptions = useMemo(
-    () => (data?.managerKPI || []).map((m) => m.manager).filter(Boolean),
-    [data]
+    () => (analytics?.managerKPI || []).map((m) => m.manager).filter(Boolean),
+    [analytics]
   );
 
   const handleExport = () => {
@@ -99,7 +100,7 @@ export default function CrmAnalytics({ trackerConnected = false }) {
     );
   }
 
-  if (!data || data.empty) {
+  if (!analytics || analytics.empty) {
     return (
       <div className="bg-craft-surface border border-craft-border rounded-xl p-8 text-center">
         <div className="text-white/20 text-sm">Недостаточно данных для анализа</div>
@@ -113,6 +114,9 @@ export default function CrmAnalytics({ trackerConnected = false }) {
       <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3.5 border-b border-craft-border">
         <h2 className="text-[13px] font-display font-medium tracking-tight">CRM Аналитика</h2>
         <div className="flex items-center gap-2">
+          {typeof data?.leadsCount === 'number' && (
+            <span className="text-2xs text-white/25">{data.leadsCount} лидов</span>
+          )}
           <select
             value={cohort}
             onChange={(e) => setCohort(e.target.value)}
@@ -165,17 +169,17 @@ export default function CrmAnalytics({ trackerConnected = false }) {
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.2 }}
           >
-            {tab === 'conversion' && <ConversionTab conversion={data.conversion} />}
-            {tab === 'velocity' && <VelocityTab velocity={data.velocityChangelog || data.velocity} />}
-            {tab === 'scoring' && <ScoringTab scores={data.scores} mlScores={data.mlScores} />}
-            {tab === 'forecast' && <PipelineForecastTab forecast={data.forecast} />}
-            {tab === 'anomalies' && <AnomaliesTab anomalies={data.anomalies} />}
-            {tab === 'cohorts' && <CohortsTab cohorts={data.cohorts} />}
-            {tab === 'kpi' && <KpiTab rows={data.managerKPI} />}
-            {tab === 'winloss' && <WinLossTab winLoss={data.winLoss} />}
-            {tab === 'segments' && <SegmentsTab segments={data.segments} />}
-            {tab === 'trend' && <TrendTab trend={data.creationTrend} byPeriod={data.conversionByPeriod} />}
-            {tab === 'revforecast' && <RevenueForecastTab revenueForecast={data.revenueForecast} />}
+            {tab === 'conversion' && <ConversionTab conversion={analytics.conversion} />}
+            {tab === 'velocity' && <VelocityTab velocity={analytics.velocityChangelog || analytics.velocity} />}
+            {tab === 'scoring' && <ScoringTab scores={analytics.scores} mlScores={analytics.mlScores} />}
+            {tab === 'forecast' && <PipelineForecastTab forecast={analytics.forecast} />}
+            {tab === 'anomalies' && <AnomaliesTab anomalies={analytics.anomalies} />}
+            {tab === 'cohorts' && <CohortsTab cohorts={analytics.cohorts} />}
+            {tab === 'kpi' && <KpiTab rows={analytics.managerKPI} />}
+            {tab === 'winloss' && <WinLossTab winLoss={analytics.winLoss} />}
+            {tab === 'segments' && <SegmentsTab segments={analytics.segments} />}
+            {tab === 'trend' && <TrendTab trend={analytics.creationTrend} byPeriod={analytics.conversionByPeriod} />}
+            {tab === 'revforecast' && <RevenueForecastTab revenueForecast={analytics.revenueForecast} />}
           </motion.div>
         </AnimatePresence>
       </div>
