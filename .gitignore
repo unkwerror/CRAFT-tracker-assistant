@@ -34,7 +34,9 @@ STYLE.md
 # ═══════════════════════════════════════
 # Cursor / AI workspaces
 # ═══════════════════════════════════════
-.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/agents/
 agent-transcripts/
 
 # ═══════════════════════════════════════

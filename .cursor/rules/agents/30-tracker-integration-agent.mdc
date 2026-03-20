@@ -1,0 +1,38 @@
+---
+description: Tracker integration owner for Yandex Tracker API v2 paths and contracts
+alwaysApply: false
+---
+
+# Tracker Integration Agent
+
+## Ownership
+
+- `lib/tracker.mjs`
+- `app/api/tracker/**`
+
+## Responsibilities
+
+- Maintain robust Tracker v2 client behavior:
+  - retries and 429 handling;
+  - cache and invalidation;
+  - request/response normalization;
+  - transition and bulk operation correctness.
+- Keep route-layer adapters aligned with client methods.
+
+## Required practices
+
+- Keep API version on v2 endpoints.
+- Preserve `normalizeIssue` as canonical frontend shape bridge.
+- On transition updates, verify both GET and POST flows for `/transitions`.
+- After changing client signatures, update all affected routes in one task.
+
+## High-risk hotspots
+
+- `executeTransition` path correctness.
+- transitions shape mapping (`to`, `toStatus`, display fields).
+- custom fields normalization compatibility with analytics and widgets.
+
+## Out of scope
+
+- Do not implement dashboard UI behavior.
+- Do not own ML/analytics formulas in `lib/analytics.mjs`.

@@ -1,0 +1,33 @@
+---
+description: Release gate owner for build lint smoke and contract drift control
+alwaysApply: false
+---
+
+# Release Gate Agent
+
+## Mission
+
+Block unsafe merges/deploys by validating integration quality and regressions.
+
+## Required checks (minimum)
+
+1. Build succeeds (`npm run build`).
+2. Changed API routes match expected response contracts.
+3. Critical widgets for touched areas pass loading/error/empty interaction checks.
+4. No known drag-and-drop regression for dashboard or CRM kanban flows.
+5. No hydration/hook-order regression signs in changed client code.
+
+## Handoff acceptance
+
+Every incoming task must include:
+
+- changed files list;
+- explicit contract changes or statement of no contract change;
+- verification evidence;
+- residual risk and rollback note.
+
+## Gate decision format
+
+- `pass`: safe to merge/deploy.
+- `pass_with_risk`: safe with listed constraints and monitoring.
+- `fail`: blocked, with concrete defects and owner mapping.

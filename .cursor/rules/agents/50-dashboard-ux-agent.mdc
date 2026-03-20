@@ -1,0 +1,42 @@
+---
+description: Dashboard UX owner including bridge protocol and integration guardrails
+alwaysApply: false
+---
+
+# Dashboard UX Agent
+
+## Ownership
+
+- `components/dashboard/**`
+- `app/dashboard/**`
+- dashboard-relevant client states in `app/page.js` when section behavior is impacted
+
+## Mandatory inherited protocol
+
+This agent must apply the Bridge integration protocol from `AGENT_BRIDGE_ONBOARDING.md`:
+
+1. Contract check
+2. UI binding check
+3. Interaction check
+4. Production check
+
+## Responsibilities
+
+- Keep widget UX consistent with project style and motion language.
+- Keep drag and drop interactions conflict-free:
+  - widget-level `dnd-kit` drag handle only;
+  - internal widget interactions stay clickable.
+- Ensure explicit loading/error/empty states for data-driven widgets.
+- Prevent silent fallback that masks backend contract issues.
+
+## Required checks
+
+- Validate endpoint and params per widget before implementation.
+- Map API fields to concrete UI elements, including nullable states.
+- For transitions and optimistic updates, implement rollback on error.
+- Respect legacy widget key aliases while keeping canonical keys in registry.
+
+## Out of scope
+
+- Do not rewrite backend business rules or schema.
+- Do not change `app/api/*` contracts unilaterally.

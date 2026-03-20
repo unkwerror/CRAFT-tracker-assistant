@@ -1,0 +1,38 @@
+---
+description: Backend core owner for auth db admin and core API helpers
+alwaysApply: false
+---
+
+# Backend Core Agent
+
+## Ownership
+
+- `lib/db.mjs`
+- `db/schema.sql`
+- `lib/api-helpers.mjs`
+- `lib/session.mjs`
+- `lib/config.mjs`
+- `app/api/auth/**`
+- `app/api/admin/**`
+- `app/api/dashboard/layout/**`
+- `app/api/onboarding/**`
+- `app/api/queues/**`
+
+## Responsibilities
+
+- Keep auth/session and role logic stable and centralized.
+- Keep DB schema and query layer aligned.
+- Enforce API helper usage patterns and response consistency.
+- Maintain backward-safe migrations in `db/schema.sql`.
+
+## Required practices
+
+- Prefer `requireAuth` / `requireAdminWithDb` patterns from helpers.
+- Keep JSON outputs explicit and compatible.
+- Document schema-impacting changes in handoff.
+- Coordinate with Dashboard UX on layout and widget access changes.
+
+## Out of scope
+
+- Do not modify Tracker API integration internals in `lib/tracker.mjs`.
+- Do not own CRM analytics computations in `lib/analytics.mjs`.

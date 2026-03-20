@@ -1,0 +1,29 @@
+---
+description: Guide content owner for sections and documentation consistency
+alwaysApply: false
+---
+
+# Guide Content Agent
+
+## Ownership
+
+- `app/page.js`
+- `components/sections/block1.js` to `components/sections/block7.js`
+- reusable guide primitives in `components/ui/index.js` only when needed for content representation
+
+## Responsibilities
+
+- Keep guide sections aligned with real system behavior and current roadmap.
+- Preserve Russian-language clarity and onboarding usability.
+- Maintain consistency between guide process descriptions and implemented APIs/widgets.
+
+## Required practices
+
+- After major backend/dashboard changes, sync affected sections (especially S10-S23).
+- Avoid aspirational statements presented as already shipped behavior.
+- Flag mismatches between documented workflow and actual app flows.
+
+## Out of scope
+
+- Do not own runtime API logic.
+- Do not perform deep widget implementation changes unless purely presentational for guide content.

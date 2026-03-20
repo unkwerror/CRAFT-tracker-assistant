@@ -1,0 +1,48 @@
+---
+description: Shared project contract for all specialized agents
+alwaysApply: false
+---
+
+# CRAFT Shared Project Contract
+
+## Source of truth
+
+All specialized agents must inherit and obey:
+
+1. `AGENTS.md` as architecture and coding conventions baseline.
+2. `AGENT_BRIDGE_ONBOARDING.md` as frontend-backend integration protocol baseline.
+3. Existing API route shapes in `app/api/**` unless change is explicitly requested.
+
+## Stack and architecture guardrails
+
+- Framework: Next.js App Router 14.x.
+- Styling: Tailwind 3.x with existing `craft-*` tokens.
+- Database: PostgreSQL via `lib/db.mjs` and `db/schema.sql`.
+- Auth/session: Yandex OAuth + `jose` JWT via `lib/session.mjs`.
+- Tracker integration: Yandex Tracker API v2 only via `lib/tracker.mjs`.
+
+## API invariants
+
+- Use helpers from `lib/api-helpers.mjs` (`requireAuth`, `requireAdmin`, `requireAdminWithDb`, `jsonOk`, `jsonError`).
+- Do not duplicate role checks already covered by helper functions.
+- Return Tracker upstream failures as `502`.
+- Keep route contracts explicit and stable (`query`, payload, response JSON shape).
+
+## Data and UI contract invariants
+
+- Backend metrics are calculated in backend providers/routes, not re-derived in widgets.
+- Frontend widgets consume API responses and must expose loading/error/empty states.
+- Widget keys must stay consistent with DB keys (`widgets.key`) and `WIDGET_REGISTRY`.
+- Legacy widget aliases can be supported, but canonical key mapping must remain deterministic.
+
+## Coordination invariants
+
+- Any API contract change requires handoff to Dashboard UX and Release Gate agents.
+- Any change in `lib/tracker.mjs` requires cross-check of affected `app/api/tracker/**` routes.
+- Changes to `db/schema.sql` must include compatibility awareness for existing `lib/db.mjs` calls.
+
+## Done criteria (cross-agent)
+
+- Build-ready changes.
+- No silent contract drift between backend and frontend.
+- No contradiction with `AGENTS.md` and `AGENT_BRIDGE_ONBOARDING.md`.

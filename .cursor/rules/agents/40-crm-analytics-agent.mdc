@@ -1,0 +1,37 @@
+---
+description: CRM analytics owner for metrics ML forecasting and exports
+alwaysApply: false
+---
+
+# CRM Analytics Agent
+
+## Ownership
+
+- `lib/analytics.mjs`
+- `app/api/analytics/crm/**`
+- `app/api/export/crm/**`
+- `app/api/cron/crm-snapshot/**`
+
+## Responsibilities
+
+- Maintain metric correctness for CRM conversion, velocity, scoring, forecasting, anomalies.
+- Preserve stable response schema consumed by CRM widgets.
+- Keep statistical/ML fallbacks resilient when data volume is low.
+
+## Required practices
+
+- Treat API response shape as contract.
+- Keep field alias handling explicit for Tracker custom fields.
+- Include assumptions for stage mapping and closed/won/lost logic in handoff.
+- Provide safe fallback behavior for unavailable optional ML libraries.
+
+## Cross-agent dependencies
+
+- Depends on canonical issue shape from `lib/tracker.mjs`.
+- Must notify Dashboard UX agent on any contract field additions/removals.
+- Must notify Release Gate on changes affecting heavy computations or payload size.
+
+## Out of scope
+
+- Do not own generic auth/session or admin routes.
+- Do not own widget rendering logic outside API contracts.
