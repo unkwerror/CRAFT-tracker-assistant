@@ -1,14 +1,11 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/session.mjs';
-import { isDbConnected, getAllUsers, updateUserRole } from '@/lib/db.mjs';
-import { ROLES } from '@/lib/config.mjs';
-import { ROLE_DASHBOARD } from '@/lib/dashboard-config.mjs';
+import { isDbConnected, getAllUsers, getAllRoles, updateUserRole, logAction } from '@/lib/db.mjs';
 
 async function checkAdminAccess() {
   const session = await getSession();
   if (!session) return { error: 'Not authenticated', status: 401 };
-  const dashConfig = ROLE_DASHBOARD[session.role];
-  if (!dashConfig?.canManageRoles) return { error: 'Forbidden', status: 403 };
+  if (!['exdir', 'admin'].includes(session.role)) return { error: 'Forbidden', status: 403 };
   return { session };
 }
 
@@ -23,7 +20,8 @@ export async function GET() {
 
   try {
     const users = await getAllUsers();
-    return NextResponse.json({ users });
+    const roles = await getAllRoles();
+    return NextResponse.json({ users, roles });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
@@ -40,12 +38,16 @@ export async function PATCH(request) {
 
   const { userId, role } = await request.json();
 
-  if (!ROLES[role]) {
+  // Validate role exists in DB
+  const roles = await getAllRoles();
+  const validRole = roles.find(r => r.key === role);
+  if (!validRole) {
     return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
   }
 
   try {
     await updateUserRole(userId, role);
+    await logAction(auth.session.uid, 'role_changed', 'user', String(userId), null, { role });
     return NextResponse.json({ success: true, userId, role });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
