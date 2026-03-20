@@ -1,5 +1,4 @@
 import './globals.css';
-import PageTransition from '@/components/ui/PageTransition';
 
 export const metadata = {
   title: 'Крафт Ассистент',
@@ -18,7 +17,7 @@ export default function RootLayout({ children }) {
         />
       </head>
       <body className="bg-craft-bg text-white font-sans antialiased">
-        <PageTransition>{children}</PageTransition>
+        {children}
       </body>
     </html>
   );

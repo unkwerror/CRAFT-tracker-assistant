@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence, motion, Reorder } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { ROLE_DASHBOARD } from '@/lib/dashboard-config.mjs';
 import QueueTasks from './QueueTasks';
 import CrmKanban from './CrmKanban';
@@ -142,6 +142,36 @@ export default function DashboardShell({ user }) {
     persistLayout(defaults);
   }, [enabledKeys, fallback.widgets, persistLayout]);
 
+  const [dragId, setDragId] = useState(null);
+  const [dragOverId, setDragOverId] = useState(null);
+
+  const onDragStart = useCallback((e, id) => {
+    setDragId(id);
+    e.dataTransfer.effectAllowed = 'move';
+  }, []);
+  const onDragEnd = useCallback(() => {
+    setDragId(null);
+    setDragOverId(null);
+  }, []);
+  const onDragOver = useCallback((e, id) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (id !== dragId) setDragOverId(id);
+  }, [dragId]);
+  const onDrop = useCallback((e, targetId) => {
+    e.preventDefault();
+    if (!dragId || dragId === targetId) return;
+    const from = widgets.indexOf(dragId);
+    const to = widgets.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    const next = [...widgets];
+    next.splice(from, 1);
+    next.splice(to, 0, dragId);
+    updateWidgets(next);
+    setDragId(null);
+    setDragOverId(null);
+  }, [dragId, widgets, updateWidgets]);
+
   const available = enabledKeys
     .map(key => WIDGET_REGISTRY[key] ? [key, WIDGET_REGISTRY[key]] : null)
     .filter(Boolean);
@@ -222,11 +252,7 @@ export default function DashboardShell({ user }) {
           />
         </div>
       ) : (
-        <Reorder.Group
-          axis="y"
-          values={widgets}
-          onReorder={updateWidgets}
-          as={motion.div}
+        <motion.div
           variants={container}
           initial="hidden"
           animate="show"
@@ -237,22 +263,26 @@ export default function DashboardShell({ user }) {
               const w = WIDGET_REGISTRY[id];
               if (!w) return null;
               return (
-                <Reorder.Item
+                <motion.div
                   key={id}
-                  value={id}
-                  as={motion.div}
-                  layout
                   variants={item}
                   exit="exit"
-                  whileDrag={{ scale: 1.01, boxShadow: '0 14px 36px rgba(0,0,0,0.35)' }}
-                  className={`${w.size === 'full' ? 'lg:col-span-2' : ''} cursor-grab active:cursor-grabbing`}
+                  layout
+                  draggable
+                  onDragStart={e => onDragStart(e, id)}
+                  onDragEnd={onDragEnd}
+                  onDragOver={e => onDragOver(e, id)}
+                  onDrop={e => onDrop(e, id)}
+                  className={`${w.size === 'full' ? 'lg:col-span-2' : ''} cursor-grab active:cursor-grabbing ${
+                    dragId === id ? 'opacity-50 scale-[0.98]' : ''
+                  } ${dragOverId === id ? 'ring-2 ring-craft-accent/30 rounded-xl' : ''}`}
                 >
                   {w.render(widgetProps)}
-                </Reorder.Item>
+                </motion.div>
               );
             })}
           </AnimatePresence>
-        </Reorder.Group>
+        </motion.div>
       )}
 
       <AnimatePresence>
