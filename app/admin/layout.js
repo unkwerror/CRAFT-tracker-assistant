@@ -1,17 +1,17 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/session.mjs';
 import { ROLES } from '@/lib/config.mjs';
-import { ROLE_DASHBOARD } from '@/lib/dashboard-config.mjs';
 import Sidebar from '@/components/dashboard/Sidebar';
+
+const ADMIN_ROLES = ['exdir', 'admin'];
 
 export default async function AdminLayout({ children }) {
   const session = await getSession();
   if (!session) redirect('/login');
 
-  const role = ROLES[session.role] || ROLES.architect;
-  const dashConfig = ROLE_DASHBOARD[session.role] || ROLE_DASHBOARD.architect;
+  if (!ADMIN_ROLES.includes(session.role)) redirect('/dashboard');
 
-  if (!dashConfig.canManageRoles) redirect('/dashboard');
+  const role = ROLES[session.role] || ROLES.architect;
 
   const user = {
     id: session.uid,
@@ -22,10 +22,15 @@ export default async function AdminLayout({ children }) {
     queues: role.queues,
   };
 
+  const roleConfig = {
+    label: role.label,
+    canManageRoles: true,
+  };
+
   return (
     <div className="flex min-h-screen">
-      <Sidebar user={user} roleConfig={dashConfig} />
-      <main className="flex-1 ml-56 p-6 lg:p-8 max-w-5xl">
+      <Sidebar user={user} roleConfig={roleConfig} />
+      <main className="flex-1 ml-56 p-6 lg:p-8 max-w-6xl">
         {children}
       </main>
     </div>
