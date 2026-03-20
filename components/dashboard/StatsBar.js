@@ -115,6 +115,12 @@ export default function StatsBar({ trackerConnected = false }) {
       icon: <IconCalendar />,
     },
   ];
+  const numericValues = cards.map((c) => {
+    if (typeof c.value === 'number') return c.value;
+    const parsed = parseInt(String(c.value), 10);
+    return Number.isFinite(parsed) ? parsed : 0;
+  });
+  const maxValue = Math.max(...numericValues, 1);
 
   return (
     <motion.div
@@ -125,38 +131,96 @@ export default function StatsBar({ trackerConnected = false }) {
       className="grid grid-cols-2 lg:grid-cols-5 gap-3"
     >
       {cards.map((card, i) => (
-        <motion.div
+        <MorphMetricCard
           key={card.label}
+          card={card}
           variants={{
             hidden: { opacity: 0, y: 12 },
             show: { opacity: 1, y: 0, transition: { duration: 0.32, ease: [0.16, 1, 0.3, 1] } },
           }}
-          whileHover={{
-            y: -3,
-            borderColor: 'rgba(91,164,245,0.28)',
-            boxShadow: '0 10px 28px rgba(0,0,0,0.35), 0 0 0 1px rgba(91,164,245,0.16)',
-          }}
-          className="group bg-craft-surface/90 border border-craft-border rounded-2xl p-4 cursor-default"
-        >
-          <div className="flex items-start justify-between mb-3">
-            <span className="text-[11px] text-white/30 font-medium">{card.label}</span>
-            <div className="p-1.5 rounded-lg transition-colors duration-200" style={{ color: card.color + '50' }}>
-              {card.icon}
-            </div>
-          </div>
-          <div className="flex items-end gap-2">
-            <div className="text-2xl font-display font-light tracking-tight" style={{ color: card.color }}>
-              <AnimatedValue value={card.value} />
-            </div>
-            {card.trend != null && card.trend !== 0 && (
-              <span className={`text-2xs font-medium mb-1 ${card.trend > 0 ? 'text-craft-green' : 'text-craft-red'}`}>
-                {card.trend > 0 ? '↑' : '↓'}{Math.abs(card.trend)}%
-              </span>
-            )}
-          </div>
-          <div className="text-[11px] text-white/20 mt-0.5">{card.sub}</div>
-        </motion.div>
+          pressure={Math.min(1, numericValues[i] / maxValue)}
+          maskId={`metric-mask-${i}`}
+        />
       ))}
+    </motion.div>
+  );
+}
+
+function MorphMetricCard({ card, variants, pressure, maskId }) {
+  const intensity = 0.22 + pressure * 0.78;
+  const border = 16 - pressure * 6;
+  return (
+    <motion.div
+      variants={variants}
+      whileHover={{
+        y: -4,
+        borderColor: 'rgba(91,164,245,0.3)',
+        boxShadow: '0 10px 28px rgba(0,0,0,0.35), 0 0 0 1px rgba(91,164,245,0.2)',
+      }}
+      animate={{
+        borderRadius: border,
+        scale: 1 + pressure * 0.012,
+      }}
+      className="group relative bg-craft-surface/90 border border-craft-border p-4 cursor-default overflow-hidden"
+    >
+      <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <defs>
+          <mask id={maskId}>
+            <rect x="0" y="0" width="100" height="100" fill="black" />
+            <motion.circle
+              cx={30 + pressure * 45}
+              cy={18 + pressure * 32}
+              r={16 + pressure * 18}
+              fill="white"
+              animate={{
+                cx: [30 + pressure * 45, 36 + pressure * 42, 30 + pressure * 45],
+                cy: [18 + pressure * 32, 22 + pressure * 28, 18 + pressure * 32],
+                r: [16 + pressure * 18, 19 + pressure * 20, 16 + pressure * 18],
+              }}
+              transition={{ duration: 5.2, repeat: Infinity, ease: 'easeInOut' }}
+            />
+            <motion.rect
+              x={58 - pressure * 22}
+              y={54 - pressure * 20}
+              width={24 + pressure * 30}
+              height={24 + pressure * 22}
+              rx={6 + pressure * 8}
+              fill="white"
+              animate={{
+                x: [58 - pressure * 22, 54 - pressure * 18, 58 - pressure * 22],
+                y: [54 - pressure * 20, 58 - pressure * 16, 54 - pressure * 20],
+                rx: [6 + pressure * 8, 10 + pressure * 6, 6 + pressure * 8],
+              }}
+              transition={{ duration: 6.1, repeat: Infinity, ease: 'easeInOut', delay: 0.35 }}
+            />
+          </mask>
+          <linearGradient id={`${maskId}-g`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor={card.color} stopOpacity={0.09 + intensity * 0.16} />
+            <stop offset="100%" stopColor={card.color} stopOpacity={0.01} />
+          </linearGradient>
+        </defs>
+        <rect x="0" y="0" width="100" height="100" fill={`url(#${maskId}-g)`} mask={`url(#${maskId})`} />
+      </svg>
+
+      <div className="relative z-10">
+        <div className="flex items-start justify-between mb-3">
+          <span className="text-[11px] text-white/30 font-medium">{card.label}</span>
+          <div className="p-1.5 rounded-lg transition-colors duration-200" style={{ color: card.color + '60' }}>
+            {card.icon}
+          </div>
+        </div>
+        <div className="flex items-end gap-2">
+          <div className="text-2xl font-display font-light tracking-tight" style={{ color: card.color }}>
+            <AnimatedValue value={card.value} />
+          </div>
+          {card.trend != null && card.trend !== 0 && (
+            <span className={`text-2xs font-medium mb-1 ${card.trend > 0 ? 'text-craft-green' : 'text-craft-red'}`}>
+              {card.trend > 0 ? '↑' : '↓'}{Math.abs(card.trend)}%
+            </span>
+          )}
+        </div>
+        <div className="text-[11px] text-white/20 mt-0.5">{card.sub}</div>
+      </div>
     </motion.div>
   );
 }

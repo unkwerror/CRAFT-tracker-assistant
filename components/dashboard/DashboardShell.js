@@ -1,6 +1,9 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { DndContext, PointerSensor, TouchSensor, KeyboardSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, rectSortingStrategy, arrayMove, sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { ROLE_DASHBOARD } from '@/lib/dashboard-config.mjs';
 import QueueTasks from './QueueTasks';
 import CrmKanban from './CrmKanban';
@@ -16,6 +19,7 @@ import WidgetPicker from './WidgetPicker';
 import CrmAnalytics from './CrmAnalytics';
 import CrmTimeline from './CrmTimeline';
 import LeadAging from './LeadAging';
+import BrandIllustration from './BrandIllustration';
 
 /**
  * Widget registry: maps widget key → { render, title, desc, size }.
@@ -98,6 +102,7 @@ export default function DashboardShell({ user }) {
   const [enabledKeys, setEnabledKeys] = useState([]);
   const [showPicker, setShowPicker] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [activeDragId, setActiveDragId] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -142,35 +147,27 @@ export default function DashboardShell({ user }) {
     persistLayout(defaults);
   }, [enabledKeys, fallback.widgets, persistLayout]);
 
-  const [dragId, setDragId] = useState(null);
-  const [dragOverId, setDragOverId] = useState(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
-  const onDragStart = useCallback((e, id) => {
-    setDragId(id);
-    e.dataTransfer.effectAllowed = 'move';
+  const onDndStart = useCallback((event) => {
+    setActiveDragId(event.active?.id ?? null);
   }, []);
-  const onDragEnd = useCallback(() => {
-    setDragId(null);
-    setDragOverId(null);
-  }, []);
-  const onDragOver = useCallback((e, id) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (id !== dragId) setDragOverId(id);
-  }, [dragId]);
-  const onDrop = useCallback((e, targetId) => {
-    e.preventDefault();
-    if (!dragId || dragId === targetId) return;
-    const from = widgets.indexOf(dragId);
-    const to = widgets.indexOf(targetId);
-    if (from < 0 || to < 0) return;
-    const next = [...widgets];
-    next.splice(from, 1);
-    next.splice(to, 0, dragId);
-    updateWidgets(next);
-    setDragId(null);
-    setDragOverId(null);
-  }, [dragId, widgets, updateWidgets]);
+
+  const onDndEnd = useCallback((event) => {
+    const { active, over } = event;
+    setActiveDragId(null);
+    if (!over || active.id === over.id) return;
+    const oldIndex = widgets.indexOf(active.id);
+    const newIndex = widgets.indexOf(over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    updateWidgets(arrayMove(widgets, oldIndex, newIndex));
+  }, [widgets, updateWidgets]);
+
+  const onDndCancel = useCallback(() => setActiveDragId(null), []);
 
   const available = enabledKeys
     .map(key => WIDGET_REGISTRY[key] ? [key, WIDGET_REGISTRY[key]] : null)
@@ -202,10 +199,13 @@ export default function DashboardShell({ user }) {
           <span className="text-white/8">/</span>
           <span className="text-2xs text-white/12">{fallback.greeting}</span>
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <h1 className="text-xl font-display font-light tracking-tight">
             {greet}, <span className="text-white/40">{user?.name?.split(' ')[0] || 'коллега'}</span>
           </h1>
+          <div className="hidden xl:block w-[220px] h-[80px]">
+            <BrandIllustration state="idle" className="h-full" />
+          </div>
           <motion.button
             onClick={() => setShowPicker(v => !v)}
             whileTap={{ scale: 0.97 }}
@@ -252,37 +252,40 @@ export default function DashboardShell({ user }) {
           />
         </div>
       ) : (
-        <motion.div
-          variants={container}
-          initial="hidden"
-          animate="show"
-          className="grid grid-cols-1 lg:grid-cols-2 gap-3"
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={onDndStart}
+          onDragEnd={onDndEnd}
+          onDragCancel={onDndCancel}
         >
-          <AnimatePresence>
-            {widgets.map((id) => {
-              const w = WIDGET_REGISTRY[id];
-              if (!w) return null;
-              return (
-                <motion.div
-                  key={id}
-                  variants={item}
-                  exit="exit"
-                  layout
-                  draggable
-                  onDragStart={e => onDragStart(e, id)}
-                  onDragEnd={onDragEnd}
-                  onDragOver={e => onDragOver(e, id)}
-                  onDrop={e => onDrop(e, id)}
-                  className={`${w.size === 'full' ? 'lg:col-span-2' : ''} cursor-grab active:cursor-grabbing ${
-                    dragId === id ? 'opacity-50 scale-[0.98]' : ''
-                  } ${dragOverId === id ? 'ring-2 ring-craft-accent/30 rounded-xl' : ''}`}
-                >
-                  {w.render(widgetProps)}
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-        </motion.div>
+          <SortableContext items={widgets} strategy={rectSortingStrategy}>
+            <motion.div
+              variants={container}
+              initial="hidden"
+              animate="show"
+              className="grid grid-cols-1 lg:grid-cols-2 gap-3"
+            >
+              <AnimatePresence>
+                {widgets.map((id) => {
+                  const w = WIDGET_REGISTRY[id];
+                  if (!w) return null;
+                  return (
+                    <SortableWidget
+                      key={id}
+                      id={id}
+                      full={w.size === 'full'}
+                      isActive={activeDragId === id}
+                      variants={item}
+                    >
+                      {w.render(widgetProps)}
+                    </SortableWidget>
+                  );
+                })}
+              </AnimatePresence>
+            </motion.div>
+          </SortableContext>
+        </DndContext>
       )}
 
       <AnimatePresence>
@@ -295,6 +298,9 @@ export default function DashboardShell({ user }) {
             className="text-center py-24"
           >
             <div className="text-[13px] text-white/20 mb-3">Дашборд пуст</div>
+            <div className="w-[280px] h-[120px] mx-auto mb-5">
+              <BrandIllustration state="loading" className="h-full" />
+            </div>
             <motion.button
               whileTap={{ scale: 0.97 }}
               whileHover={{ y: -1 }}
@@ -307,5 +313,40 @@ export default function DashboardShell({ user }) {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+function SortableWidget({ id, full, isActive, children, variants }) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 30 : 'auto',
+  };
+  return (
+    <motion.div
+      ref={setNodeRef}
+      style={style}
+      variants={variants}
+      exit="exit"
+      layout
+      className={`${full ? 'lg:col-span-2' : ''} relative ${
+        isDragging || isActive ? 'opacity-70 scale-[0.99] ring-2 ring-craft-accent/25 rounded-xl' : ''
+      }`}
+    >
+      <button
+        ref={setActivatorNodeRef}
+        {...attributes}
+        {...listeners}
+        className="absolute right-2 top-2 z-20 w-6 h-6 rounded-md bg-black/25 border border-white/[0.08] text-white/30 hover:text-white/60 hover:bg-black/35 cursor-grab active:cursor-grabbing"
+        title="Перетащить виджет"
+        aria-label="Перетащить виджет"
+      >
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 mx-auto" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path d="M5 3h6M5 8h6M5 13h6" />
+        </svg>
+      </button>
+      {children}
+    </motion.div>
   );
 }

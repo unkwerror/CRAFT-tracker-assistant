@@ -1,6 +1,7 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
+import { Canvas, useFrame } from '@react-three/fiber';
 
 const FUNNEL_STAGES = [
   { key: 'newLead',       label: 'Новый лид',     color: '#5BA4F5' },
@@ -99,6 +100,15 @@ export default function FunnelChart({ trackerConnected = false }) {
         </div>
       </div>
 
+      <div className="h-28 border-b border-craft-border/70 bg-craft-bg/30">
+        <Canvas orthographic camera={{ position: [0, 0, 100], zoom: 70 }}>
+          <color attach="background" args={['#101114']} />
+          <ambientLight intensity={0.35} />
+          <LivingFunnelNodes counts={FUNNEL_STAGES.map((s) => data.byStage[s.key] || 0)} />
+          <LivingParticleFlow />
+        </Canvas>
+      </div>
+
       <div className="px-5 py-4 space-y-2.5">
         {FUNNEL_STAGES.map((stage, i) => {
           const count = data.byStage[stage.key] || 0;
@@ -162,5 +172,77 @@ export default function FunnelChart({ trackerConnected = false }) {
         </div>
       )}
     </motion.div>
+  );
+}
+
+function LivingFunnelNodes({ counts }) {
+  const group = useRef();
+  const max = Math.max(...counts, 1);
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    if (group.current) {
+      group.current.children.forEach((child, i) => {
+        const pulse = 1 + Math.sin(t * 1.4 + i * 0.35) * 0.06;
+        child.scale.setScalar(pulse);
+      });
+    }
+  });
+
+  return (
+    <group ref={group}>
+      {counts.map((count, i) => {
+        const x = -2.7 + i * 1.1;
+        const ratio = count / max;
+        const y = -0.6 + ratio * 1.3;
+        const size = 0.08 + ratio * 0.13;
+        return (
+          <mesh key={i} position={[x, y, 0]}>
+            <circleGeometry args={[size, 24]} />
+            <meshBasicMaterial color={ratio > 0.6 ? '#42C774' : ratio > 0.3 ? '#5BA4F5' : '#7A8899'} transparent opacity={0.9} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
+function LivingParticleFlow() {
+  const points = useMemo(
+    () =>
+      Array.from({ length: 80 }, (_, i) => ({
+        x: -3.1 + Math.random() * 6.2,
+        y: -1.4 + Math.random() * 2.6,
+        speed: 0.25 + Math.random() * 0.7,
+        drift: (Math.random() - 0.5) * 0.3,
+        size: 0.018 + Math.random() * 0.028,
+        phase: i * 0.17,
+      })),
+    []
+  );
+  const group = useRef();
+
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    if (!group.current) return;
+    group.current.children.forEach((mesh, i) => {
+      const p = points[i];
+      let nx = p.x + ((t * p.speed + p.phase) % 6.6);
+      if (nx > 3.2) nx -= 6.6;
+      mesh.position.x = nx;
+      mesh.position.y = p.y + Math.sin(t * 1.4 + p.phase) * 0.08 + p.drift;
+      const alpha = 0.25 + (Math.sin(t * 2 + p.phase) + 1) * 0.25;
+      mesh.material.opacity = alpha;
+    });
+  });
+
+  return (
+    <group ref={group}>
+      {points.map((p, i) => (
+        <mesh key={i} position={[p.x, p.y, 0]}>
+          <circleGeometry args={[p.size, 12]} />
+          <meshBasicMaterial color="#6DD8E0" transparent opacity={0.35} />
+        </mesh>
+      ))}
+    </group>
   );
 }
