@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Alignment, Fit, Layout, useRive } from '@rive-app/react-canvas';
 
@@ -9,7 +10,7 @@ export default function BrandIllustration({ className = '', state = 'idle' }) {
   if (src) {
     return (
       <div className={`rounded-2xl border border-white/[0.08] bg-craft-surface2/70 overflow-hidden ${className}`}>
-        <RiveBrandInner src={src} stateMachine={stateMachine} />
+        <RiveBrandInner src={src} stateMachine={stateMachine} state={state} />
       </div>
     );
   }
@@ -78,12 +79,51 @@ export default function BrandIllustration({ className = '', state = 'idle' }) {
   );
 }
 
-function RiveBrandInner({ src, stateMachine }) {
-  const { RiveComponent } = useRive({
+function RiveBrandInner({ src, stateMachine, state = 'idle' }) {
+  const { rive, RiveComponent } = useRive({
     src,
     autoplay: true,
     stateMachines: stateMachine || undefined,
     layout: new Layout({ fit: Fit.Contain, alignment: Alignment.Center }),
   });
+
+  useEffect(() => {
+    if (!rive || !stateMachine) return;
+
+    const inputs = rive.stateMachineInputs(stateMachine) || [];
+    const indexInputName = process.env.NEXT_PUBLIC_RIVE_BRAND_STATE_INPUT || '';
+    const triggerName =
+      stateMachine && (
+        (state === 'idle' && process.env.NEXT_PUBLIC_RIVE_BRAND_TRIGGER_IDLE) ||
+        (state === 'loading' && process.env.NEXT_PUBLIC_RIVE_BRAND_TRIGGER_LOADING) ||
+        (state === 'success' && process.env.NEXT_PUBLIC_RIVE_BRAND_TRIGGER_SUCCESS) ||
+        (state === 'error' && process.env.NEXT_PUBLIC_RIVE_BRAND_TRIGGER_ERROR) ||
+        ''
+      );
+
+    const stateIndex = state === 'loading' ? 1 : state === 'success' ? 2 : state === 'error' ? 3 : 0;
+    if (indexInputName) {
+      const indexInput = inputs.find((input) => input?.name === indexInputName);
+      if (indexInput && 'value' in indexInput) indexInput.value = stateIndex;
+    }
+
+    const boolInputNames = {
+      idle: process.env.NEXT_PUBLIC_RIVE_BRAND_BOOL_IDLE || '',
+      loading: process.env.NEXT_PUBLIC_RIVE_BRAND_BOOL_LOADING || '',
+      success: process.env.NEXT_PUBLIC_RIVE_BRAND_BOOL_SUCCESS || '',
+      error: process.env.NEXT_PUBLIC_RIVE_BRAND_BOOL_ERROR || '',
+    };
+    Object.entries(boolInputNames).forEach(([key, name]) => {
+      if (!name) return;
+      const input = inputs.find((item) => item?.name === name);
+      if (input && 'value' in input) input.value = key === state;
+    });
+
+    if (triggerName) {
+      const triggerInput = inputs.find((input) => input?.name === triggerName);
+      if (triggerInput && typeof triggerInput.fire === 'function') triggerInput.fire();
+    }
+  }, [rive, stateMachine, state]);
+
   return <RiveComponent />;
 }
