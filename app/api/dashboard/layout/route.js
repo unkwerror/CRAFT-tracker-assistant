@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/session.mjs';
-import { isDbConnected, getDashboardLayout, saveDashboardLayout, getEnabledWidgetKeys, ensureUserWidgets } from '@/lib/db.mjs';
+import { isDbConnected, getWidgetsForRole, getDefaultWidgetsForRole, getDashboardLayout, saveDashboardLayout } from '@/lib/db.mjs';
 
 // GET /api/dashboard/layout
 export async function GET() {
@@ -8,20 +8,30 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   if (!isDbConnected()) {
-    return NextResponse.json({ layout: [], enabledKeys: [], source: 'no-db' });
+    return NextResponse.json({ layout: [], enabledKeys: [] });
   }
 
   try {
-    // Auto-initialize widgets if user has none
-    await ensureUserWidgets(session.uid, session.role);
+    // Get widgets available for this role (from widgets.allowed_roles)
+    const available = await getWidgetsForRole(session.role);
+    const enabledKeys = available.map(w => w.key);
 
-    const layout = await getDashboardLayout(session.uid);
-    const enabledKeys = await getEnabledWidgetKeys(session.uid);
+    // Get saved layout
+    const savedLayout = await getDashboardLayout(session.uid);
+
+    // If user has a saved layout, filter to only available widgets
+    let layout;
+    if (savedLayout && savedLayout.length > 0) {
+      layout = savedLayout.filter(key => enabledKeys.includes(key));
+    } else {
+      // First visit: use defaults for this role
+      layout = await getDefaultWidgetsForRole(session.role);
+    }
 
     return NextResponse.json({ layout, enabledKeys });
   } catch (err) {
     console.error('Layout API error:', err.message);
-    return NextResponse.json({ layout: [], enabledKeys: [], error: err.message });
+    return NextResponse.json({ layout: [], enabledKeys: [] });
   }
 }
 
@@ -29,10 +39,7 @@ export async function GET() {
 export async function PATCH(request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-
-  if (!isDbConnected()) {
-    return NextResponse.json({ error: 'DB not configured' }, { status: 503 });
-  }
+  if (!isDbConnected()) return NextResponse.json({ error: 'DB not configured' }, { status: 503 });
 
   try {
     const { layout } = await request.json();
