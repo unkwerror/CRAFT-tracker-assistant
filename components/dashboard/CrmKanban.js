@@ -90,6 +90,7 @@ export default function CrmKanban({ trackerConnected = false }) {
   // ─── Drag & Drop ───
 
   const onDragStart = useCallback((e, task) => {
+    e.stopPropagation();
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', task.key);
     setDragState(s => ({ ...s, taskKey: task.key }));
@@ -97,6 +98,7 @@ export default function CrmKanban({ trackerConnected = false }) {
   }, [getTransitions]);
 
   const onDragOver = useCallback((e, colKey) => {
+    e.stopPropagation();
     e.preventDefault();
     const taskKey = dragState.taskKey;
     if (!taskKey) return;
@@ -107,6 +109,7 @@ export default function CrmKanban({ trackerConnected = false }) {
   }, [dragState.taskKey]);
 
   const onDrop = useCallback(async (e, targetCol) => {
+    e.stopPropagation();
     e.preventDefault();
     const taskKey = dragState.taskKey;
     setDragState({ taskKey: null, overCol: null, allowed: null });
@@ -144,6 +147,10 @@ export default function CrmKanban({ trackerConnected = false }) {
 
   const onDragEnd = useCallback(() => {
     setDragState({ taskKey: null, overCol: null, allowed: null });
+  }, []);
+
+  const handleExport = useCallback(() => {
+    window.open('/api/export/crm', '_blank');
   }, []);
 
   // ─── Group tasks ───
@@ -203,6 +210,9 @@ export default function CrmKanban({ trackerConnected = false }) {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
+      onDragStartCapture={(e) => e.stopPropagation()}
+      onDragOverCapture={(e) => e.stopPropagation()}
+      onDropCapture={(e) => e.stopPropagation()}
       className="bg-craft-surface border border-craft-border rounded-xl overflow-hidden relative"
     >
       <AnimatePresence>
@@ -228,6 +238,13 @@ export default function CrmKanban({ trackerConnected = false }) {
         <h2 className="text-[13px] font-display font-medium tracking-tight">CRM — Воронка лидов</h2>
         <div className="flex items-center gap-2">
           <span className="text-2xs text-white/25">{tasks.length} лидов</span>
+          <motion.button
+            onClick={handleExport}
+            whileTap={{ scale: 0.97 }}
+            className="text-2xs px-3 py-1.5 rounded-lg bg-white/[0.06] text-white/70 hover:bg-white/[0.1] transition-colors"
+          >
+            Экспорт CSV
+          </motion.button>
           <motion.button
             onClick={() => setShowNewLead(v => !v)}
             whileTap={{ scale: 0.97 }}
@@ -268,7 +285,7 @@ export default function CrmKanban({ trackerConnected = false }) {
                 key={col.key}
                 layout
                 onDragOver={e => onDragOver(e, col.key)}
-                onDragLeave={() => setDragState(s => ({ ...s, overCol: null, allowed: null }))}
+                onDragLeave={(e) => { e.stopPropagation(); setDragState(s => ({ ...s, overCol: null, allowed: null })); }}
                 onDrop={e => onDrop(e, col.key)}
                 animate={isOver ? { scale: 1.01 } : { scale: 1 }}
                 className={`w-56 shrink-0 rounded-lg border ${col.bg} p-2 min-h-[200px] transition-all duration-200 ${borderClass}`}
@@ -326,13 +343,22 @@ export default function CrmKanban({ trackerConnected = false }) {
 }
 
 function LeadCard({ task, isDragging, onClick, onDragStart, onDragEnd }) {
+  const handleDragStart = (e) => {
+    e.stopPropagation();
+    onDragStart?.(e);
+  };
+  const handleDragEnd = (e) => {
+    e.stopPropagation();
+    onDragEnd?.(e);
+  };
+
   return (
     <motion.div
       layout
       layoutId={`lead-${task.key}`}
       draggable={!!onDragStart}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
       onClick={onClick}
       whileHover={{ y: -2 }}
       whileTap={{ scale: 0.985 }}
@@ -357,6 +383,13 @@ function LeadDetailModal({ task, onClose, onTransition, onUpdated, getTransition
   const [editing, setEditing] = useState(false);
   const [editFields, setEditFields] = useState({});
   const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState('overview');
+  const [comments, setComments] = useState(null);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  const [commentSending, setCommentSending] = useState(false);
+  const [history, setHistory] = useState(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   useEffect(() => {
     setLoadingT(true);
@@ -377,6 +410,51 @@ function LeadDetailModal({ task, onClose, onTransition, onUpdated, getTransition
   }, [task.key]);
 
   const displayTask = detail || task;
+  const tabs = [
+    { key: 'overview', label: 'Обзор' },
+    { key: 'comments', label: 'Комментарии' },
+    { key: 'history', label: 'История' },
+  ];
+
+  const loadComments = useCallback(async () => {
+    setCommentsLoading(true);
+    try {
+      const r = await fetch(`/api/tracker/issues/${task.key}/comments`);
+      const data = await r.json();
+      if (data.error) throw new Error(data.error);
+      setComments(Array.isArray(data.comments) ? data.comments : []);
+    } catch {
+      setComments([]);
+    } finally {
+      setCommentsLoading(false);
+    }
+  }, [task.key]);
+
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const r = await fetch(`/api/tracker/issues/${task.key}/changelog?field=status`);
+      const data = await r.json();
+      if (data.error) throw new Error(data.error);
+      setHistory(Array.isArray(data.changelog) ? data.changelog : []);
+    } catch {
+      setHistory([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [task.key]);
+
+  useEffect(() => {
+    if (tab === 'comments' && comments === null && !commentsLoading) {
+      loadComments();
+    }
+  }, [tab, comments, commentsLoading, loadComments]);
+
+  useEffect(() => {
+    if (tab === 'history' && history === null && !historyLoading) {
+      loadHistory();
+    }
+  }, [tab, history, historyLoading, loadHistory]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -401,6 +479,54 @@ function LeadDetailModal({ task, onClose, onTransition, onUpdated, getTransition
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSendComment = async () => {
+    if (!commentText.trim()) return;
+    setCommentSending(true);
+    try {
+      const r = await fetch(`/api/tracker/issues/${task.key}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: commentText.trim() }),
+      });
+      const data = await r.json();
+      if (data.error) throw new Error(data.error);
+      setCommentText('');
+      setComments(prev => {
+        const next = Array.isArray(prev) ? prev : [];
+        return [data.comment, ...next];
+      });
+      onUpdated?.();
+    } catch (e) {
+      alert(`Ошибка комментария: ${e.message}`);
+    } finally {
+      setCommentSending(false);
+    }
+  };
+
+  const renderHistory = () => {
+    if (historyLoading) return <div className="text-2xs text-white/25">Загрузка истории...</div>;
+    if (!history || history.length === 0) return <div className="text-2xs text-white/20">Нет данных истории</div>;
+
+    return (
+      <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+        {history.map((h, i) => {
+          const from = h.from?.display || h.from?.key || h.from || '—';
+          const to = h.to?.display || h.to?.key || h.to || '—';
+          const ts = h.updatedAt || h.createdAt;
+          const who = h.updatedBy?.display || h.createdBy?.display || h.author?.display || 'Система';
+          return (
+            <div key={h.id || `${ts || 'ts'}-${i}`} className="bg-white/[0.03] border border-white/[0.05] rounded-lg p-2.5">
+              <div className="text-2xs text-white/65">{from} → {to}</div>
+              <div className="text-2xs text-white/25 mt-1">
+                {ts ? new Date(ts).toLocaleString('ru-RU') : '—'} • {who}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   return (
@@ -437,96 +563,154 @@ function LeadDetailModal({ task, onClose, onTransition, onUpdated, getTransition
           </div>
         </div>
 
-        {editing ? (
-          <div className="space-y-3 mb-4">
-            <input
-              type="text"
-              value={editFields.summary}
-              onChange={e => setEditFields(f => ({ ...f, summary: e.target.value }))}
-              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white/80 focus:outline-none focus:border-craft-accent/40"
-            />
-            <textarea
-              value={editFields.description}
-              onChange={e => setEditFields(f => ({ ...f, description: e.target.value }))}
-              rows={4}
-              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-2xs text-white/60 focus:outline-none focus:border-craft-accent/40 resize-none"
-              placeholder="Описание..."
-            />
-            <motion.button
-              onClick={handleSave}
-              disabled={saving}
-              whileTap={{ scale: 0.97 }}
-              className="text-2xs px-3 py-1.5 rounded-lg bg-craft-accent/20 text-craft-accent hover:bg-craft-accent/30 transition-colors disabled:opacity-40"
+        <div className="flex items-center gap-1 p-1 mb-4 rounded-lg bg-white/[0.03] border border-white/[0.05]">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`text-2xs px-2.5 py-1.5 rounded-md transition-colors ${
+                tab === t.key ? 'bg-craft-accent/20 text-craft-accent' : 'text-white/30 hover:text-white/60'
+              }`}
             >
-              {saving ? 'Сохранение...' : 'Сохранить'}
-            </motion.button>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'overview' ? (
+          <>
+            {editing ? (
+              <div className="space-y-3 mb-4">
+                <input
+                  type="text"
+                  value={editFields.summary}
+                  onChange={e => setEditFields(f => ({ ...f, summary: e.target.value }))}
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white/80 focus:outline-none focus:border-craft-accent/40"
+                />
+                <textarea
+                  value={editFields.description}
+                  onChange={e => setEditFields(f => ({ ...f, description: e.target.value }))}
+                  rows={4}
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-2xs text-white/60 focus:outline-none focus:border-craft-accent/40 resize-none"
+                  placeholder="Описание..."
+                />
+                <motion.button
+                  onClick={handleSave}
+                  disabled={saving}
+                  whileTap={{ scale: 0.97 }}
+                  className="text-2xs px-3 py-1.5 rounded-lg bg-craft-accent/20 text-craft-accent hover:bg-craft-accent/30 transition-colors disabled:opacity-40"
+                >
+                  {saving ? 'Сохранение...' : 'Сохранить'}
+                </motion.button>
+              </div>
+            ) : (
+              <>
+                <div className="text-[15px] font-medium mb-3">{displayTask.summary}</div>
+                {displayTask.description && (
+                  <div className="text-2xs text-white/40 mb-4 whitespace-pre-wrap border-l-2 border-white/10 pl-3">{displayTask.description}</div>
+                )}
+              </>
+            )}
+
+            <div className="grid grid-cols-2 gap-2 mb-4 text-2xs">
+              <div className="bg-white/[0.03] rounded-lg p-2">
+                <span className="text-white/25">Статус</span>
+                <div className="text-white/70 mt-0.5">{displayTask.status}</div>
+              </div>
+              <div className="bg-white/[0.03] rounded-lg p-2">
+                <span className="text-white/25">Исполнитель</span>
+                <div className="text-white/70 mt-0.5">{displayTask.assignee || 'Не назначен'}</div>
+              </div>
+              <div className="bg-white/[0.03] rounded-lg p-2">
+                <span className="text-white/25">Создан</span>
+                <div className="text-white/70 mt-0.5">{displayTask.createdAt ? new Date(displayTask.createdAt).toLocaleDateString('ru-RU') : '—'}</div>
+              </div>
+              <div className="bg-white/[0.03] rounded-lg p-2">
+                <span className="text-white/25">Обновлён</span>
+                <div className="text-white/70 mt-0.5">{displayTask.updatedAt ? new Date(displayTask.updatedAt).toLocaleDateString('ru-RU') : '—'}</div>
+              </div>
+            </div>
+
+            {displayTask.customFields && Object.keys(displayTask.customFields).length > 0 && (
+              <div className="mb-4">
+                <div className="text-2xs text-white/25 mb-2">Доп. поля</div>
+                <div className="space-y-1">
+                  {Object.entries(displayTask.customFields).map(([k, v]) => (
+                    <div key={k} className="flex justify-between text-2xs">
+                      <span className="text-white/30">{k}</span>
+                      <span className="text-white/60">{String(v)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="border-t border-craft-border pt-3 mt-3">
+              <div className="text-2xs text-white/25 mb-2">Сменить статус</div>
+              {loadingT ? (
+                <div className="flex items-center gap-2 text-2xs text-white/15">
+                  <div className="w-3 h-3 border border-white/10 border-t-white/30 rounded-full animate-spin" />
+                  Загрузка переходов...
+                </div>
+              ) : transitions.length === 0 ? (
+                <div className="text-2xs text-white/15">Нет доступных переходов</div>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {transitions.map(t => (
+                    <motion.button
+                      key={t.id}
+                      onClick={() => onTransition(t.id, t.toDisplay || t.display)}
+                      whileTap={{ scale: 0.97 }}
+                      className="text-2xs px-2.5 py-1.5 rounded-lg bg-white/[0.06] text-white/60 hover:bg-white/10 hover:text-white/80 transition-colors border border-white/[0.06]"
+                    >
+                      → {t.toDisplay || t.display}
+                    </motion.button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        ) : tab === 'comments' ? (
+          <div>
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1 mb-3">
+              {commentsLoading ? (
+                <div className="text-2xs text-white/25">Загрузка комментариев...</div>
+              ) : !comments || comments.length === 0 ? (
+                <div className="text-2xs text-white/20">Комментариев пока нет</div>
+              ) : (
+                comments.map((c) => (
+                  <div key={c.id} className="bg-white/[0.03] border border-white/[0.05] rounded-lg p-2.5">
+                    <div className="text-2xs text-white/70 whitespace-pre-wrap">{c.text}</div>
+                    <div className="text-2xs text-white/25 mt-1">
+                      {c.createdBy || 'Автор'} • {c.createdAt ? new Date(c.createdAt).toLocaleString('ru-RU') : '—'}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="space-y-2">
+              <textarea
+                rows={3}
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                placeholder="Добавить комментарий..."
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-2xs text-white/70 focus:outline-none focus:border-craft-accent/40 resize-none"
+              />
+              <div className="flex justify-end">
+                <motion.button
+                  onClick={handleSendComment}
+                  disabled={commentSending || !commentText.trim()}
+                  whileTap={{ scale: 0.97 }}
+                  className="text-2xs px-3 py-1.5 rounded-lg bg-craft-accent/20 text-craft-accent hover:bg-craft-accent/30 transition-colors disabled:opacity-40"
+                >
+                  {commentSending ? 'Отправка...' : 'Отправить'}
+                </motion.button>
+              </div>
+            </div>
           </div>
         ) : (
-          <>
-            <div className="text-[15px] font-medium mb-3">{displayTask.summary}</div>
-            {displayTask.description && (
-              <div className="text-2xs text-white/40 mb-4 whitespace-pre-wrap border-l-2 border-white/10 pl-3">{displayTask.description}</div>
-            )}
-          </>
+          <div>{renderHistory()}</div>
         )}
-
-        <div className="grid grid-cols-2 gap-2 mb-4 text-2xs">
-          <div className="bg-white/[0.03] rounded-lg p-2">
-            <span className="text-white/25">Статус</span>
-            <div className="text-white/70 mt-0.5">{displayTask.status}</div>
-          </div>
-          <div className="bg-white/[0.03] rounded-lg p-2">
-            <span className="text-white/25">Исполнитель</span>
-            <div className="text-white/70 mt-0.5">{displayTask.assignee || 'Не назначен'}</div>
-          </div>
-          <div className="bg-white/[0.03] rounded-lg p-2">
-            <span className="text-white/25">Создан</span>
-            <div className="text-white/70 mt-0.5">{displayTask.createdAt ? new Date(displayTask.createdAt).toLocaleDateString('ru-RU') : '—'}</div>
-          </div>
-          <div className="bg-white/[0.03] rounded-lg p-2">
-            <span className="text-white/25">Обновлён</span>
-            <div className="text-white/70 mt-0.5">{displayTask.updatedAt ? new Date(displayTask.updatedAt).toLocaleDateString('ru-RU') : '—'}</div>
-          </div>
-        </div>
-
-        {displayTask.customFields && Object.keys(displayTask.customFields).length > 0 && (
-          <div className="mb-4">
-            <div className="text-2xs text-white/25 mb-2">Доп. поля</div>
-            <div className="space-y-1">
-              {Object.entries(displayTask.customFields).map(([k, v]) => (
-                <div key={k} className="flex justify-between text-2xs">
-                  <span className="text-white/30">{k}</span>
-                  <span className="text-white/60">{String(v)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="border-t border-craft-border pt-3 mt-3">
-          <div className="text-2xs text-white/25 mb-2">Сменить статус</div>
-          {loadingT ? (
-            <div className="flex items-center gap-2 text-2xs text-white/15">
-              <div className="w-3 h-3 border border-white/10 border-t-white/30 rounded-full animate-spin" />
-              Загрузка переходов...
-            </div>
-          ) : transitions.length === 0 ? (
-            <div className="text-2xs text-white/15">Нет доступных переходов</div>
-          ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {transitions.map(t => (
-                <motion.button
-                  key={t.id}
-                  onClick={() => onTransition(t.id, t.toDisplay || t.display)}
-                  whileTap={{ scale: 0.97 }}
-                  className="text-2xs px-2.5 py-1.5 rounded-lg bg-white/[0.06] text-white/60 hover:bg-white/10 hover:text-white/80 transition-colors border border-white/[0.06]"
-                >
-                  → {t.toDisplay || t.display}
-                </motion.button>
-              ))}
-            </div>
-          )}
-        </div>
 
         <div className="mt-4 pt-3 border-t border-craft-border">
           <a href={displayTask.url || `https://tracker.yandex.ru/${displayTask.key}`} target="_blank" rel="noopener noreferrer"

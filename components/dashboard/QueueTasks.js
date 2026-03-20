@@ -32,11 +32,13 @@ export default function QueueTasks({
     setWarning(null);
     const params = new URLSearchParams();
     if (queueKey) params.set('queue', queueKey);
-    fetch(`/api/tracker/tasks?${params}`)
+    const query = params.toString();
+    const url = query ? `/api/tracker/tasks?${query}` : '/api/tracker/tasks';
+    fetch(url)
       .then((r) => r.json())
       .then((data) => {
         if (data.error) throw new Error(data.error);
-        setTasks(data.tasks || []);
+        setTasks(Array.isArray(data.tasks) ? data.tasks : []);
         if (data.warning) setWarning(data.warning);
       })
       .catch((err) => setError(err.message))
