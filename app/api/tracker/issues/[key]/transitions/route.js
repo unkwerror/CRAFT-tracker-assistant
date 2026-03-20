@@ -12,12 +12,24 @@ export async function GET(_request, { params }) {
   try {
     const tracker = new TrackerClient(session.tracker_token, process.env.TRACKER_ORG_ID);
     const transitions = await tracker.getIssueTransitions(issueKey);
+    const resolveToKey = (t) => {
+      if (t?.to?.key) return t.to.key;
+      if (typeof t?.to === 'string') return t.to;
+      if (t?.toStatus?.key) return t.toStatus.key;
+      return null;
+    };
+    const resolveToDisplay = (t) => {
+      if (t?.to?.display) return t.to.display;
+      if (t?.toStatus?.display) return t.toStatus.display;
+      if (typeof t?.to === 'string') return t.to;
+      return t?.display || null;
+    };
     const normalized = (transitions || []).map((t) => ({
       id: t.id,
       key: t.key,
       display: t.display,
-      to: t.to?.key,
-      toDisplay: t.to?.display,
+      to: resolveToKey(t),
+      toDisplay: resolveToDisplay(t),
     }));
     return NextResponse.json({ transitions: normalized });
   } catch (error) {

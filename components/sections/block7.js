@@ -175,3 +175,85 @@ export function S22_Regulations() {
     <Callout type="ok" title="Принцип постепенности">Не показывайте всё сразу. Первая неделя: задачи, статусы, часы. Вторая: доска, фильтры. Третья: дашборд, создание задач. Четвёртая: Ганта, связи. Перегрузка информацией в первый день — главная причина отторжения.</Callout>
   </>);
 }
+
+// ══════════════════════════════════════
+// S23 — AGENT BRIDGE ONBOARDING
+// ══════════════════════════════════════
+export function S23_AgentBridge() {
+  return (<>
+    <SectionHero
+      num="23"
+      priority="HIGH"
+      title={<>Bridge Agent: <span className="text-sky-400">связка с Claude</span></>}
+      subtitle="Регламент для AI-агента, который соединяет backend-изменения Claude с frontend UX и контролирует целостность контрактов API."
+    />
+
+    <H2>Зачем нужен Bridge Agent</H2>
+    <P>Когда backend и frontend обновляются разными агентами, легко получить разрыв: API уже отдает новые поля, а виджет продолжает жить в старой схеме. <B>Bridge Agent</B> закрывает этот разрыв и доводит интеграцию до прод-состояния.</P>
+
+    <CardGrid cols={3}>
+      <Card accent="blue" title="Contract Guard">Проверяет параметры запросов и форму ответа endpoint’ов. Не даёт UI читать поля «по памяти».</Card>
+      <Card accent="teal" title="UI Mapper">Привязывает каждое поле API к конкретному элементу интерфейса и состояниям loading/empty/error.</Card>
+      <Card accent="amber" title="Release Gate">Перед деплоем прогоняет build, проверяет DnD, интерактивность и отсутствие регрессий.</Card>
+    </CardGrid>
+
+    <Separator />
+
+    <H2>Протокол работы (обязательный)</H2>
+    <Table
+      headers={['Шаг', 'Что делает агент', 'Результат']}
+      rows={[
+        ['1. Contract check', 'Сверяет query params, JSON shape, nullable поля, массивы и вложенные структуры', 'Фиксированная карта API-контракта'],
+        ['2. UI binding check', 'Проверяет, что каждый виджет читает данные из API, а не пересчитывает критичную аналитику на клиенте', 'Корректное отображение всех метрик'],
+        ['3. Interaction check', 'Тестирует DnD, комментарии, историю, вложения, переходы статусов, rollback при ошибке', 'Рабочие сценарии пользователя'],
+        ['4. Production check', 'Запускает сборку и проверяет отсутствие hydration/hooks ошибок', 'Deploy-ready состояние'],
+      ]}
+    />
+
+    <Separator />
+
+    <H2>Ключевые зоны контроля</H2>
+    <Accordion items={[
+      {
+        title: 'CRM Analytics',
+        content: (
+          <>
+            <P>Endpoint: <B>/api/analytics/crm?ml=true&changelog=true&cohort=month</B> (+ managerId при фильтре).</P>
+            <P>Источник данных во вкладках: <B>data.analytics.*</B>. Скоринг берется из <B>analytics.scores</B>, ML-оценки — из <B>analytics.mlScores</B>.</P>
+          </>
+        ),
+      },
+      {
+        title: 'CRM Kanban',
+        content: (
+          <>
+            <P>Карточка лида — нативный <B>div</B> с <B>draggable</B>, без motion-перехвата pointer событий.</P>
+            <P>Модалка лида: комментарии, история и вложения должны ходить в соответствующие endpoint’ы и обновлять UI без перезагрузки страницы.</P>
+          </>
+        ),
+      },
+      {
+        title: 'Dashboard DnD',
+        content: (
+          <>
+            <P>На уровне виджетов dnd-kit должен слушать только drag handle через <B>setActivatorNodeRef</B>.</P>
+            <P>Это предотвращает конфликт с интерактивными элементами внутри виджетов (канбан, формы, таблицы).</P>
+          </>
+        ),
+      },
+    ]} />
+
+    <Separator />
+
+    <H2>Debug-режим для расследования</H2>
+    <P>Bridge Agent использует debug-метки в виджетах для быстрой диагностики: endpoint, параметры, счетчики записей, текущая ветка данных. Это помогает точно определить источник ошибки: backend-контракт или frontend-маппинг.</P>
+    <Checklist items={[
+      { text: 'Включить debug: `?debugWidgets=1` или `NEXT_PUBLIC_DEBUG_WIDGETS=1`', tag: 'MUST' },
+      { text: 'Проверить счетчики по каждому CRM-виджету', tag: 'MUST' },
+      { text: 'Сверить endpoint и фактический URL запроса', tag: 'HIGH' },
+      { text: 'Проверить, что build проходит без minified React ошибок', tag: 'MUST' },
+    ]} />
+
+    <Callout type="ok" title="Главный принцип">Bridge Agent не заменяет Claude и не дублирует backend. Его задача — обеспечить, чтобы backend-изменения Claude корректно и красиво доходили до пользователя на фронте без потери критичной информации.</Callout>
+  </>);
+}

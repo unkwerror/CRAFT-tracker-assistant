@@ -7,7 +7,7 @@ import { S6_Concepts, S7_Queues, S8_Projects, S9_Links } from '@/components/sect
 import { S10_CRM, S11_Production, S12_Docs } from '@/components/sections/block4';
 import { S13_Subcontract, S14_Automations } from '@/components/sections/block5';
 import { S15_Roles, S16_FirstDay, S17_CreateTask } from '@/components/sections/block6';
-import { S18_Dashboards, S19_Access, S20_Time, S21_Roadmap, S22_Regulations } from '@/components/sections/block7';
+import { S18_Dashboards, S19_Access, S20_Time, S21_Roadmap, S22_Regulations, S23_AgentBridge } from '@/components/sections/block7';
 
 const SECTIONS = [
   { id: 's0', label: 'Введение', group: 'Зачем и почему', component: S0_Intro },
@@ -33,6 +33,7 @@ const SECTIONS = [
   { id: 's20', label: 'Трудозатраты и КП', group: 'Управление', component: S20_Time },
   { id: 's21', label: 'Дорожная карта', group: 'Управление', component: S21_Roadmap },
   { id: 's22', label: 'Регламент команды', group: 'Управление', component: S22_Regulations },
+  { id: 's23', label: 'Bridge Agent + Claude', group: 'Управление', component: S23_AgentBridge },
 ];
 
 function groupSections(sections) {
