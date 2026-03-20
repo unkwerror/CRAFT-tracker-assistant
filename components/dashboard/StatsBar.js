@@ -1,5 +1,6 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { animate, motion, useInView, useMotionValue, useTransform } from 'framer-motion';
 
 export default function StatsBar({ trackerConnected = false }) {
   const [stats, setStats] = useState(null);
@@ -49,7 +50,7 @@ export default function StatsBar({ trackerConnected = false }) {
     return (
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         {[1,2,3,4,5].map(i => (
-          <div key={i} className="bg-craft-surface border border-craft-border rounded-2xl p-4 h-24 flex items-center justify-center">
+          <div key={i} className="bg-craft-surface/80 border border-craft-border rounded-2xl p-4 h-24 flex items-center justify-center">
             <span className="text-[11px] text-white/10">—</span>
           </div>
         ))}
@@ -61,7 +62,12 @@ export default function StatsBar({ trackerConnected = false }) {
     return (
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         {[1,2,3,4,5].map(i => (
-          <div key={i} className="bg-craft-surface border border-craft-border rounded-2xl p-4 h-24 animate-pulse" />
+          <motion.div
+            key={i}
+            className="bg-craft-surface border border-craft-border rounded-2xl p-4 h-24"
+            animate={{ opacity: [0.4, 0.75, 0.4] }}
+            transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut', delay: i * 0.06 }}
+          />
         ))}
       </div>
     );
@@ -111,12 +117,26 @@ export default function StatsBar({ trackerConnected = false }) {
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+    <motion.div
+      initial="hidden"
+      whileInView="show"
+      viewport={{ once: true, amount: 0.3 }}
+      variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08 } } }}
+      className="grid grid-cols-2 lg:grid-cols-5 gap-3"
+    >
       {cards.map((card, i) => (
-        <div
+        <motion.div
           key={card.label}
-          className="group bg-craft-surface border border-craft-border rounded-2xl p-4 hover:border-craft-border2 transition-all duration-300 cursor-default"
-          style={{ animationDelay: `${i * 80}ms` }}
+          variants={{
+            hidden: { opacity: 0, y: 12 },
+            show: { opacity: 1, y: 0, transition: { duration: 0.32, ease: [0.16, 1, 0.3, 1] } },
+          }}
+          whileHover={{
+            y: -3,
+            borderColor: 'rgba(91,164,245,0.28)',
+            boxShadow: '0 10px 28px rgba(0,0,0,0.35), 0 0 0 1px rgba(91,164,245,0.16)',
+          }}
+          className="group bg-craft-surface/90 border border-craft-border rounded-2xl p-4 cursor-default"
         >
           <div className="flex items-start justify-between mb-3">
             <span className="text-[11px] text-white/30 font-medium">{card.label}</span>
@@ -126,7 +146,7 @@ export default function StatsBar({ trackerConnected = false }) {
           </div>
           <div className="flex items-end gap-2">
             <div className="text-2xl font-display font-light tracking-tight" style={{ color: card.color }}>
-              {card.value}
+              <AnimatedValue value={card.value} />
             </div>
             {card.trend != null && card.trend !== 0 && (
               <span className={`text-2xs font-medium mb-1 ${card.trend > 0 ? 'text-craft-green' : 'text-craft-red'}`}>
@@ -135,10 +155,34 @@ export default function StatsBar({ trackerConnected = false }) {
             )}
           </div>
           <div className="text-[11px] text-white/20 mt-0.5">{card.sub}</div>
-        </div>
+        </motion.div>
       ))}
-    </div>
+    </motion.div>
   );
+}
+
+function AnimatedValue({ value }) {
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true, amount: 0.8 });
+  const n = typeof value === 'number' ? value : parseInt(String(value), 10);
+  const suffix = typeof value === 'string' ? String(value).replace(String(n), '') : '';
+  const mv = useMotionValue(0);
+  const rounded = useTransform(mv, latest => Math.round(latest));
+  const [display, setDisplay] = useState(0);
+
+  useEffect(() => {
+    const unsub = rounded.on('change', v => setDisplay(v));
+    return () => unsub();
+  }, [rounded]);
+
+  useEffect(() => {
+    if (!inView || Number.isNaN(n)) return;
+    const controls = animate(mv, n, { duration: 0.9, ease: [0.16, 1, 0.3, 1] });
+    return () => controls.stop();
+  }, [inView, mv, n]);
+
+  if (Number.isNaN(n)) return <span>{value}</span>;
+  return <span ref={ref}>{display}{suffix}</span>;
 }
 
 function calcAvgCycle(tasks) {

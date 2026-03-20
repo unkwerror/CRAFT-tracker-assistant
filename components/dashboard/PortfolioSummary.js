@@ -1,29 +1,53 @@
 'use client';
 import { useState, useEffect } from 'react';
 
-const STATUS_MAP = {
-  on_track: { label: 'В графике', color: 'text-craft-green', dot: 'bg-craft-green' },
-  at_risk: { label: 'Риск', color: 'text-craft-orange', dot: 'bg-craft-orange' },
-  blocked: { label: 'Блокирован', color: 'text-craft-red', dot: 'bg-craft-red' },
-};
-
 export default function PortfolioSummary({ trackerConnected = false }) {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!trackerConnected) {
-      setLoading(false);
-      return;
-    }
-    // TODO: fetch portfolio data from Tracker API
-    // For now, will need a dedicated endpoint
-    fetch('/api/tracker/tasks?type=portfolio')
+    if (!trackerConnected) { setLoading(false); return; }
+
+    fetch('/api/tracker/queues/PROJ')
       .then(r => r.json())
-      .then(data => setProjects(data.projects || []))
-      .catch(() => {})
+      .then(data => {
+        const tasks = data.tasks || [];
+        if (data.warning || tasks.length === 0) {
+          setProjects([]);
+          return;
+        }
+
+        const byComponent = {};
+        for (const t of tasks) {
+          const comp = t.components?.[0] || 'Без проекта';
+          if (!byComponent[comp]) byComponent[comp] = { name: comp, tasks: [], total: 0, closed: 0, overdue: 0, inProgress: 0 };
+          const g = byComponent[comp];
+          g.tasks.push(t);
+          g.total++;
+          if (t.statusKey === 'closed') g.closed++;
+          if (t.statusKey === 'inProgress') g.inProgress++;
+          if (t.deadline && new Date(t.deadline) < new Date() && t.statusKey !== 'closed') g.overdue++;
+        }
+
+        const result = Object.values(byComponent)
+          .map(g => ({
+            ...g,
+            progress: g.total > 0 ? Math.round((g.closed / g.total) * 100) : 0,
+            status: g.overdue > 0 ? 'at_risk' : g.inProgress > 0 ? 'on_track' : g.closed === g.total ? 'done' : 'on_track',
+          }))
+          .sort((a, b) => b.total - a.total);
+
+        setProjects(result);
+      })
+      .catch(() => setProjects([]))
       .finally(() => setLoading(false));
   }, [trackerConnected]);
+
+  const STATUS_STYLE = {
+    on_track: { label: 'В графике', color: 'text-craft-green', dot: 'bg-craft-green' },
+    at_risk: { label: 'Риск', color: 'text-craft-orange', dot: 'bg-craft-orange' },
+    done: { label: 'Завершён', color: 'text-craft-accent', dot: 'bg-craft-accent' },
+  };
 
   return (
     <div className="bg-craft-surface border border-craft-border rounded-xl overflow-hidden transition-colors duration-200 hover:border-craft-border2">
@@ -40,30 +64,21 @@ export default function PortfolioSummary({ trackerConnected = false }) {
         </div>
       ) : !trackerConnected ? (
         <div className="px-5 py-8 text-center">
-          <div className="w-10 h-10 mx-auto mb-3 rounded-xl bg-white/[0.03] flex items-center justify-center">
-            <svg className="w-5 h-5 text-white/10" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.2">
-              <rect x="3" y="3" width="14" height="14" rx="2" />
-              <path d="M3 8h14M8 3v14" />
-            </svg>
-          </div>
           <div className="text-[13px] text-white/25 mb-1">Трекер не подключён</div>
-          <div className="text-2xs text-white/15">Обзор портфеля появится после подключения</div>
         </div>
       ) : projects.length === 0 ? (
         <div className="px-5 py-8 text-center">
-          <div className="text-[13px] text-white/25">Нет данных о проектах</div>
+          <div className="text-[13px] text-white/25 mb-1">Нет задач в PROJ</div>
+          <div className="text-2xs text-white/15">Создайте очередь PROJ в Трекере</div>
         </div>
       ) : (
         <div className="divide-y divide-white/[0.04]">
-          {projects.map((p, i) => {
-            const st = STATUS_MAP[p.status] || STATUS_MAP.on_track;
+          {projects.map((p) => {
+            const st = STATUS_STYLE[p.status] || STATUS_STYLE.on_track;
             return (
-              <div key={i} className="px-5 py-3 hover:bg-white/[0.02] transition-all duration-200">
+              <div key={p.name} className="px-5 py-3 hover:bg-white/[0.02] transition-all duration-200">
                 <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-[13px] text-white/70 truncate">{p.name}</span>
-                    {p.phase && <span className="text-2xs text-white/15 shrink-0">{p.phase}</span>}
-                  </div>
+                  <span className="text-[13px] text-white/70 truncate">{p.name}</span>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <div className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
                     <span className={`text-2xs ${st.color}`}>{st.label}</span>
@@ -71,11 +86,14 @@ export default function PortfolioSummary({ trackerConnected = false }) {
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="flex-1 h-1 bg-white/[0.04] rounded-full overflow-hidden">
-                    <div className="h-full rounded-full bg-craft-accent/40 transition-all duration-500" style={{ width: `${p.progress || 0}%` }} />
+                    <div className="h-full rounded-full bg-craft-accent/40 transition-all duration-500" style={{ width: `${p.progress}%` }} />
                   </div>
-                  <span className="text-2xs text-white/20 w-8 text-right">{p.progress || 0}%</span>
-                  {p.gip && <span className="text-2xs text-white/15">{p.gip}</span>}
+                  <span className="text-2xs text-white/20 w-8 text-right">{p.progress}%</span>
+                  <span className="text-2xs text-white/15">{p.closed}/{p.total}</span>
                 </div>
+                {p.overdue > 0 && (
+                  <div className="text-2xs text-craft-red/60 mt-1">{p.overdue} просрочено</div>
+                )}
               </div>
             );
           })}

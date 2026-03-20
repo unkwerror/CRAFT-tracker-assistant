@@ -43,7 +43,18 @@ export async function GET(request) {
         }
     }
 
-    const normalized = (tasks || []).map(normalizeIssue);
+    const now = new Date();
+    const normalized = (tasks || []).map(raw => {
+      const t = normalizeIssue(raw);
+      if (type === 'overdue' && t.deadline) {
+        t.days = Math.max(0, Math.round((now - new Date(t.deadline)) / 86400000));
+      } else if (type === 'stale' && t.updatedAt) {
+        t.days = Math.round((now - new Date(t.updatedAt)) / 86400000);
+      } else if (type === 'no_deadline') {
+        t.days = t.createdAt ? Math.round((now - new Date(t.createdAt)) / 86400000) : null;
+      }
+      return t;
+    });
     return NextResponse.json({ tasks: normalized, count: normalized.length });
 
   } catch (error) {

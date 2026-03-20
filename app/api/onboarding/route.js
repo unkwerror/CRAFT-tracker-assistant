@@ -2,10 +2,10 @@
 
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/session.mjs';
-import { isDbConnected, getOnboardingProgress, upsertOnboardingStep } from '@/lib/db.mjs';
+import { isDbConnected, getOnboardingProgress, upsertOnboardingStep, query } from '@/lib/db.mjs';
 import { ONBOARDING_STEPS } from '@/lib/config.mjs';
 
-export async function GET() {
+export async function GET(request) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
@@ -13,6 +13,25 @@ export async function GET() {
 
   if (!isDbConnected()) {
     return NextResponse.json({ error: 'DB not configured' }, { status: 503 });
+  }
+
+  const { searchParams } = new URL(request.url);
+
+  if (searchParams.get('all') === 'true') {
+    try {
+      const totalSteps = ONBOARDING_STEPS.length;
+      const { rows } = await query(
+        `SELECT user_id, COUNT(*) FILTER (WHERE completed = TRUE) as done
+         FROM onboarding GROUP BY user_id`
+      );
+      const progress = {};
+      for (const r of rows) {
+        progress[r.user_id] = Math.round((parseInt(r.done) / totalSteps) * 100);
+      }
+      return NextResponse.json({ progress });
+    } catch (err) {
+      return NextResponse.json({ progress: {} });
+    }
   }
 
   try {

@@ -14,7 +14,7 @@ export default async function DashboardLayout({ children }) {
   return (
     <div className="flex min-h-screen">
       <Sidebar user={user} canAdmin={canAdmin} />
-      <main className="flex-1 ml-56 p-5 lg:p-6">
+      <main className="flex-1 ml-16 md:ml-56 p-4 md:p-5 lg:p-6">
         {children}
       </main>
     </div>

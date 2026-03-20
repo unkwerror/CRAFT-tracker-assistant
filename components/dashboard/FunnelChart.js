@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 
 const FUNNEL_STAGES = [
   { key: 'newLead',       label: 'Новый лид',     color: '#5BA4F5' },
@@ -64,7 +65,11 @@ export default function FunnelChart({ trackerConnected = false }) {
       <div className="bg-craft-surface border border-craft-border rounded-2xl p-5">
         <h2 className="text-[13px] font-display font-medium tracking-tight mb-4">Воронка CRM</h2>
         <div className="flex justify-center py-8">
-          <div className="w-5 h-5 border-2 border-white/5 border-t-craft-cyan/40 rounded-full animate-spin" />
+          <motion.div
+            className="w-5 h-5 border-2 border-white/5 border-t-craft-cyan/40 rounded-full"
+            animate={{ rotate: 360 }}
+            transition={{ repeat: Infinity, duration: 0.8, ease: 'linear' }}
+          />
         </div>
       </div>
     );
@@ -73,16 +78,23 @@ export default function FunnelChart({ trackerConnected = false }) {
   const maxCount = Math.max(...FUNNEL_STAGES.map(s => data.byStage[s.key] || 0), 1);
 
   return (
-    <div className="bg-craft-surface border border-craft-border rounded-2xl overflow-hidden hover:border-craft-border2 transition-colors duration-200">
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.2 }}
+      transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
+      className="bg-craft-surface border border-craft-border rounded-2xl overflow-hidden hover:border-craft-border2 transition-colors duration-200"
+    >
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-craft-border">
         <h2 className="text-[13px] font-display font-medium tracking-tight">Воронка CRM</h2>
         <div className="flex items-center gap-3">
-          <button
+          <motion.button
             onClick={() => setShowS2S(v => !v)}
+            whileTap={{ scale: 0.97 }}
             className={`text-[10px] transition-colors ${showS2S ? 'text-craft-accent' : 'text-white/20 hover:text-white/40'}`}
           >
             {showS2S ? 'Общая' : 'Stage→Stage'}
-          </button>
+          </motion.button>
           <span className="text-[10px] text-white/20 tabular-nums">{data.allCount} всего</span>
         </div>
       </div>
@@ -110,12 +122,14 @@ export default function FunnelChart({ trackerConnected = false }) {
                 </div>
               </div>
               <div className="h-5 bg-white/[0.02] rounded-lg overflow-hidden">
-                <div
-                  className="h-full rounded-lg transition-all duration-700 ease-out"
+                <motion.div
+                  initial={{ width: 0 }}
+                  whileInView={{ width: `${widthPct}%` }}
+                  viewport={{ once: true, amount: 0.8 }}
+                  transition={{ duration: 0.65, delay: i * 0.07, ease: [0.16, 1, 0.3, 1] }}
+                  className="h-full rounded-lg"
                   style={{
-                    width: `${widthPct}%`,
                     background: `linear-gradient(90deg, ${stage.color}30, ${stage.color}50)`,
-                    transitionDelay: `${i * 100}ms`,
                   }}
                 />
               </div>
@@ -147,6 +161,6 @@ export default function FunnelChart({ trackerConnected = false }) {
           )}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }

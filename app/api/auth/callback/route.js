@@ -48,7 +48,7 @@ export async function GET(request) {
     let trackerLogin = null;
     if (process.env.TRACKER_ORG_ID) {
       try {
-        const trackerRes = await fetch('https://api.tracker.yandex.net/v3/myself', {
+        const trackerRes = await fetch('https://api.tracker.yandex.net/v2/myself', {
           headers: {
             'Authorization': `OAuth ${oauthToken}`,
             'X-Org-ID': process.env.TRACKER_ORG_ID,
