@@ -176,11 +176,6 @@ export default function DashboardShell({ user }) {
   const widgetProps = { trackerConnected, dbConnected, userId: user?.id, queues: user?.queues || [] };
   const hour = new Date().getHours();
   const greet = hour < 6 ? 'Доброй ночи' : hour < 12 ? 'Доброе утро' : hour < 18 ? 'Добрый день' : 'Добрый вечер';
-  const dashboardState = !loaded
-    ? 'loading'
-    : (!trackerConnected || !dbConnected)
-      ? 'error'
-      : (widgets.length === 0 ? 'idle' : 'success');
   const container = {
     hidden: {},
     show: { transition: { staggerChildren: 0.08, delayChildren: 0.05 } },
@@ -209,7 +204,7 @@ export default function DashboardShell({ user }) {
             {greet}, <span className="text-white/40">{user?.name?.split(' ')[0] || 'коллега'}</span>
           </h1>
           <div className="hidden xl:block w-[220px] h-[80px]">
-            <BrandIllustration state={dashboardState} className="h-full" />
+            <BrandIllustration state="idle" className="h-full" />
           </div>
           <motion.button
             onClick={() => setShowPicker(v => !v)}
@@ -304,7 +299,7 @@ export default function DashboardShell({ user }) {
           >
             <div className="text-[13px] text-white/20 mb-3">Дашборд пуст</div>
             <div className="w-[280px] h-[120px] mx-auto mb-5">
-              <BrandIllustration state="idle" className="h-full" />
+              <BrandIllustration state="loading" className="h-full" />
             </div>
             <motion.button
               whileTap={{ scale: 0.97 }}
@@ -335,7 +330,7 @@ function SortableWidget({ id, full, isActive, children, variants }) {
       variants={variants}
       exit="exit"
       layout
-      className={`${full ? 'lg:col-span-2' : ''} relative ${
+      className={`${full ? 'lg:col-span-2' : ''} ${
         isDragging || isActive ? 'opacity-70 scale-[0.99] ring-2 ring-craft-accent/25 rounded-xl' : ''
       }`}
     >

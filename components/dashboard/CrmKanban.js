@@ -345,26 +345,20 @@ export default function CrmKanban({ trackerConnected = false }) {
 function LeadCard({ task, isDragging, onClick, onDragStart, onDragEnd }) {
   const handleDragStart = (e) => {
     e.stopPropagation();
-    onDragStart?.(e);
-  };
-  const handleDragEnd = (e) => {
-    e.stopPropagation();
-    onDragEnd?.(e);
+    if (onDragStart) onDragStart(e);
   };
 
   return (
-    <motion.div
-      layout
-      layoutId={`lead-${task.key}`}
+    <div
       draggable={!!onDragStart}
       onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
+      onDragEnd={onDragEnd}
       onClick={onClick}
-      whileHover={{ y: -2 }}
-      whileTap={{ scale: 0.985 }}
-      className={`bg-craft-bg/80 rounded-lg p-3 border border-white/[0.06] cursor-pointer transition-all duration-200 hover:border-white/10 select-none ${
-        isDragging ? 'opacity-40 scale-95' : ''
-      } ${onDragStart ? 'cursor-grab active:cursor-grabbing' : ''}`}
+      className={`bg-craft-bg/80 rounded-lg p-3 border border-white/[0.06] cursor-pointer select-none
+        hover:border-white/10 hover:-translate-y-0.5 active:scale-[0.985]
+        transition-all duration-200
+        ${isDragging ? 'opacity-40 scale-95' : ''}
+        ${onDragStart ? 'cursor-grab active:cursor-grabbing' : ''}`}
     >
       <div className="text-2xs font-mono text-white/20 mb-1">{task.key}</div>
       <div className="text-[12px] text-white/70 mb-1.5 line-clamp-2">{task.summary}</div>
@@ -372,7 +366,7 @@ function LeadCard({ task, isDragging, onClick, onDragStart, onDragEnd }) {
         <span>{task.assignee || 'Не назначен'}</span>
         {task.priority && <span className="text-white/15">{task.priority}</span>}
       </div>
-    </motion.div>
+    </div>
   );
 }
 
