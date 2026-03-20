@@ -12,12 +12,13 @@ import PortfolioSummary from './PortfolioSummary';
 import TeamOnboarding from './TeamOnboarding';
 import SystemStatus from './SystemStatus';
 import WidgetPicker from './WidgetPicker';
+import CrmAnalytics from './CrmAnalytics';
+import CrmTimeline from './CrmTimeline';
+import LeadAging from './LeadAging';
 
 /**
  * Widget registry: maps widget key → { render, title, desc, size }.
- * Keys must match both the DB `widgets.key` column and the legacy
- * `ROLE_DASHBOARD` config. Legacy aliases (my_tasks, crm_widget, etc.)
- * point to the same components so old layouts keep working.
+ * Keys must match the DB `widgets.key` column.
  */
 const WIDGET_REGISTRY = {
   // ── DB keys (canonical) ──
@@ -69,12 +70,19 @@ const WIDGET_REGISTRY = {
     render: (p) => <SystemStatus {...p} />,
     title: 'Статус системы', desc: 'Подключения к Трекеру и БД', size: 'half',
   },
+  crm_analytics: {
+    render: (p) => <CrmAnalytics trackerConnected={p.trackerConnected} />,
+    title: 'CRM Аналитика', desc: 'Скоринг, прогноз, velocity, аномалии', size: 'full',
+  },
+  crm_timeline: {
+    render: (p) => <CrmTimeline trackerConnected={p.trackerConnected} />,
+    title: 'CRM — Лента', desc: 'Последние события CRM', size: 'half',
+  },
+  lead_aging: {
+    render: (p) => <LeadAging trackerConnected={p.trackerConnected} />,
+    title: 'Застрявшие лиды', desc: 'Лиды без обновлений', size: 'half',
+  },
 
-  // ── Legacy aliases (backwards-compat with ROLE_DASHBOARD) ──
-  get my_tasks() { return WIDGET_REGISTRY.tasks_my; },
-  get project_tasks() { return WIDGET_REGISTRY.tasks_proj; },
-  get crm_widget() { return WIDGET_REGISTRY.kanban_crm; },
-  get crm_summary() { return WIDGET_REGISTRY.tasks_crm; },
 };
 
 export { WIDGET_REGISTRY };

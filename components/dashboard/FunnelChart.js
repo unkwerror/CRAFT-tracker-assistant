@@ -3,11 +3,11 @@ import { useState, useEffect } from 'react';
 
 const FUNNEL_STAGES = [
   { key: 'newLead',       label: 'Новый лид',     color: '#5BA4F5' },
-  { key: 'qualification', label: 'Квалификация',  color: '#C9A0FF' },
-  { key: 'proposal',      label: 'КП отправлено', color: '#FFB155' },
-  { key: 'negotiation',   label: 'Переговоры',    color: '#FF9F43' },
-  { key: 'contract',      label: 'Договор',       color: '#42C774' },
-  { key: 'projectOpened', label: 'Проект открыт', color: '#2ECC71' },
+  { key: 'qualification', label: 'Квалификация',   color: '#C9A0FF' },
+  { key: 'proposal',      label: 'КП отправлено',  color: '#FFB155' },
+  { key: 'negotiation',   label: 'Переговоры',     color: '#FF9F43' },
+  { key: 'contract',      label: 'Договор',        color: '#42C774' },
+  { key: 'projectOpened', label: 'Проект открыт',  color: '#2ECC71' },
 ];
 
 const STATUS_MAP = {
@@ -22,6 +22,7 @@ const STATUS_MAP = {
 export default function FunnelChart({ trackerConnected = false }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showS2S, setShowS2S] = useState(false);
 
   useEffect(() => {
     if (!trackerConnected) { setLoading(false); return; }
@@ -75,14 +76,29 @@ export default function FunnelChart({ trackerConnected = false }) {
     <div className="bg-craft-surface border border-craft-border rounded-2xl overflow-hidden hover:border-craft-border2 transition-colors duration-200">
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-craft-border">
         <h2 className="text-[13px] font-display font-medium tracking-tight">Воронка CRM</h2>
-        <span className="text-[10px] text-white/20 tabular-nums">{data.allCount} всего</span>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowS2S(v => !v)}
+            className={`text-[10px] transition-colors ${showS2S ? 'text-craft-accent' : 'text-white/20 hover:text-white/40'}`}
+          >
+            {showS2S ? 'Общая' : 'Stage→Stage'}
+          </button>
+          <span className="text-[10px] text-white/20 tabular-nums">{data.allCount} всего</span>
+        </div>
       </div>
 
       <div className="px-5 py-4 space-y-2.5">
         {FUNNEL_STAGES.map((stage, i) => {
           const count = data.byStage[stage.key] || 0;
           const widthPct = maxCount > 0 ? Math.max((count / maxCount) * 100, 4) : 4;
-          const convPct = data.total > 0 ? Math.round((count / data.total) * 100) : 0;
+
+          let convLabel;
+          if (showS2S && i > 0) {
+            const prevCount = data.byStage[FUNNEL_STAGES[i - 1].key] || 0;
+            convLabel = prevCount > 0 ? `${Math.round((count / prevCount) * 100)}%` : '—';
+          } else {
+            convLabel = data.total > 0 ? `${Math.round((count / data.total) * 100)}%` : '0%';
+          }
 
           return (
             <div key={stage.key} className="group">
@@ -90,7 +106,7 @@ export default function FunnelChart({ trackerConnected = false }) {
                 <span className="text-[11px] text-white/40 group-hover:text-white/60 transition-colors">{stage.label}</span>
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-medium tabular-nums" style={{ color: stage.color }}>{count}</span>
-                  <span className="text-[10px] text-white/15 tabular-nums w-8 text-right">{convPct}%</span>
+                  <span className="text-[10px] text-white/15 tabular-nums w-8 text-right">{convLabel}</span>
                 </div>
               </div>
               <div className="h-5 bg-white/[0.02] rounded-lg overflow-hidden">
@@ -103,6 +119,13 @@ export default function FunnelChart({ trackerConnected = false }) {
                   }}
                 />
               </div>
+              {showS2S && i > 0 && (
+                <div className="flex justify-center -my-0.5">
+                  <svg className="w-3 h-3 text-white/10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M6 2v8M3 7l3 3 3-3" />
+                  </svg>
+                </div>
+              )}
             </div>
           );
         })}

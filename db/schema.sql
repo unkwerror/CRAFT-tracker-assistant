@@ -61,17 +61,30 @@ CREATE TABLE IF NOT EXISTS roles (
   color       TEXT DEFAULT '#7A8899',
   level       INT DEFAULT 1,
   queues      JSONB DEFAULT '[]',
+  permissions JSONB DEFAULT '[]',
   is_system   BOOLEAN DEFAULT FALSE,
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
-INSERT INTO roles (key, label, color, level, queues, is_system) VALUES
-  ('director',  'Генеральный директор',       '#5BA4F5', 5, '["CRM:read","PROJ:read","DOCS:read","HR:read"]', TRUE),
-  ('exdir',     'Исполнительный директор',     '#C9A0FF', 4, '["CRM:full","PROJ:full","DOCS:full","HR:full"]', TRUE),
-  ('gip',       'ГИП',                          '#42C774', 3, '["PROJ:full","DOCS:read","HR:own"]',             TRUE),
-  ('architect', 'Архитектор / Инженер',         '#FFB155', 1, '["PROJ:own","HR:own"]',                          TRUE),
-  ('manager',   'Менеджер по продажам',         '#6DD8E0', 2, '["CRM:full","PROJ:read"]',                       TRUE),
-  ('admin',     'Администратор',                '#7A8899', 4, '["DOCS:full","HR:full"]',                        TRUE)
+INSERT INTO roles (key, label, color, level, queues, permissions, is_system) VALUES
+  ('director',  'Генеральный директор',   '#5BA4F5', 5,
+    '["CRM:read","PROJ:read","DOCS:read","HR:read"]',
+    '["admin:panel","crm:read","proj:read","docs:read","hr:read"]', TRUE),
+  ('exdir',     'Исполнительный директор', '#C9A0FF', 4,
+    '["CRM:full","PROJ:full","DOCS:full","HR:full"]',
+    '["admin:panel","admin:roles","admin:widgets","crm:read","crm:write","crm:transition","proj:read","proj:write","docs:read","docs:write","hr:read","hr:write"]', TRUE),
+  ('gip',       'ГИП',                    '#42C774', 3,
+    '["PROJ:full","DOCS:read","HR:own"]',
+    '["proj:read","proj:write","docs:read","hr:read"]', TRUE),
+  ('architect', 'Архитектор / Инженер',   '#FFB155', 1,
+    '["PROJ:own","HR:own"]',
+    '["proj:read","proj:write","hr:read"]', TRUE),
+  ('manager',   'Менеджер по продажам',   '#6DD8E0', 2,
+    '["CRM:full","PROJ:read"]',
+    '["crm:read","crm:write","crm:transition","proj:read"]', TRUE),
+  ('admin',     'Администратор',          '#7A8899', 4,
+    '["DOCS:full","HR:full"]',
+    '["admin:panel","admin:widgets","docs:read","docs:write","hr:read","hr:write"]', TRUE)
 ON CONFLICT (key) DO NOTHING;
 
 
@@ -106,7 +119,10 @@ INSERT INTO widgets (key, title, description, size, component, default_settings,
   ('audit',             'Аудит качества',       'Без дедлайна, зависшие, просроченные',         'full', 'AuditWidget',       '{}',                                           '["gip","exdir","director"]',                   '["gip","exdir"]',                      40),
   ('portfolio_summary', 'Портфель проектов',    'Обзор всех проектов бюро',                     'full', 'PortfolioSummary',  '{}',                                           '["exdir","director"]',                         '["exdir","director"]',                 50),
   ('team_onboarding',   'Онбординг команды',    'Прогресс онбординга всех сотрудников',         'full', 'TeamOnboarding',    '{}',                                           '["exdir","admin"]',                            '["exdir"]',                            60),
-  ('system_status',     'Статус системы',        'Подключения к Трекеру и БД',                   'half', 'SystemStatus',      '{}',                                           '["exdir","admin"]',                            '["exdir","admin"]',                    90)
+  ('system_status',     'Статус системы',        'Подключения к Трекеру и БД',                   'half', 'SystemStatus',      '{}',                                           '["exdir","admin"]',                            '["exdir","admin"]',                    90),
+  ('crm_analytics',    'CRM Аналитика',         'Скоринг, прогноз выручки, velocity, аномалии', 'full', 'CrmAnalytics',      '{}',                                           '["manager","exdir","director"]',               '["manager","exdir"]',                  16),
+  ('crm_timeline',     'CRM — Лента',           'Последние события CRM',                        'half', 'CrmTimeline',       '{}',                                           '["manager","exdir","director"]',               '["manager","exdir"]',                  17),
+  ('lead_aging',       'Застрявшие лиды',        'Лиды без обновлений',                          'half', 'LeadAging',         '{}',                                           '["manager","exdir","director"]',               '["manager","exdir"]',                  18)
 ON CONFLICT (key) DO NOTHING;
 
 

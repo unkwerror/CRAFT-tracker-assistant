@@ -19,6 +19,7 @@ export default function QueueTasks({
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [warning, setWarning] = useState(null);
   const [expanded, setExpanded] = useState(false);
 
   const fetchTasks = useCallback(() => {
@@ -28,6 +29,7 @@ export default function QueueTasks({
     }
     setLoading(true);
     setError(null);
+    setWarning(null);
     const params = new URLSearchParams();
     if (queueKey) params.set('queue', queueKey);
     fetch(`/api/tracker/tasks?${params}`)
@@ -35,6 +37,7 @@ export default function QueueTasks({
       .then((data) => {
         if (data.error) throw new Error(data.error);
         setTasks(data.tasks || []);
+        if (data.warning) setWarning(data.warning);
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -79,6 +82,11 @@ export default function QueueTasks({
           title="Трекер не подключён"
           sub="Добавьте TRACKER_ORG_ID в переменные окружения"
         />
+      ) : warning ? (
+        <div className="px-5 py-8 text-center">
+          <div className="text-[13px] text-craft-orange/50 mb-1">{warning}</div>
+          <div className="text-2xs text-white/15">Настройте очередь в Яндекс Трекере</div>
+        </div>
       ) : tasks.length === 0 ? (
         <div className="px-5 py-10 text-center">
           <div className="text-[13px] text-craft-green/50">{emptyMessage}</div>

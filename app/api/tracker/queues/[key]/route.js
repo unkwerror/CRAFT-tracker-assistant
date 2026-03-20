@@ -14,6 +14,10 @@ export async function GET(request, { params }) {
 
   const tracker = new TrackerClient(session.tracker_token, process.env.TRACKER_ORG_ID);
 
+  if (!tracker.enabled) {
+    return NextResponse.json({ tasks: [], count: 0, queue: key, warning: 'Tracker not configured' });
+  }
+
   try {
     const tasks = await tracker.getQueueTasks(key, {
       assigneeMe: assignee === 'me',
@@ -24,7 +28,14 @@ export async function GET(request, { params }) {
     const normalized = (tasks || []).map(normalizeIssue);
     return NextResponse.json({ tasks: normalized, count: normalized.length, queue: key });
   } catch (error) {
-    console.error(`Tracker queue ${key} error:`, error.message);
-    return NextResponse.json({ error: error.message }, { status: 502 });
+    const msg = error.message || '';
+    if (msg.includes('404') || msg.includes('not found') || msg.includes('Queue not found')) {
+      return NextResponse.json({
+        tasks: [], count: 0, queue: key,
+        warning: `Очередь ${key} не найдена в Трекере. Создайте её вручную.`,
+      });
+    }
+    console.error(`Tracker queue ${key} error:`, msg);
+    return NextResponse.json({ error: msg }, { status: 502 });
   }
 }
