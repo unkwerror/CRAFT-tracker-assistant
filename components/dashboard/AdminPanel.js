@@ -10,7 +10,7 @@ const AVAILABLE_ROLES = [
   { value: 'admin', label: 'Администратор', color: '#7A8899' },
 ];
 
-// Stub users for when Supabase is not connected
+// Stub users for when DB is not connected
 const STUB_USERS = [
   { id: 1, name: 'Гришанова Н.А.', email: 'grishanova@craft72.ru', role: 'director', last_login: '2026-03-19T10:00:00' },
   { id: 2, name: 'Саврина Е.В.', email: 'savrina@craft72.ru', role: 'exdir', last_login: '2026-03-20T09:15:00' },
@@ -24,7 +24,7 @@ const STUB_USERS = [
 
 const STORAGE_KEY = 'craft_admin_roles';
 
-// localStorage fallback when Supabase isn't connected
+// localStorage fallback when DB isn't connected
 function loadLocalRoles() {
   if (typeof window === 'undefined') return null;
   try {
@@ -42,7 +42,7 @@ export default function AdminPanel({ currentUserId, currentUserRole }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(null); // user id being saved
   const [toast, setToast] = useState(null);
-  const [supabaseConnected, setSupabaseConnected] = useState(false);
+  const [dbConnected, setDbConnected] = useState(false);
 
   useEffect(() => {
     // Try to fetch from API first
@@ -53,7 +53,7 @@ export default function AdminPanel({ currentUserId, currentUserRole }) {
       })
       .then(data => {
         setUsers(data.users || []);
-        setSupabaseConnected(true);
+        setDbConnected(true);
       })
       .catch(() => {
         // Fallback: use stub data with localStorage overrides
@@ -63,7 +63,7 @@ export default function AdminPanel({ currentUserId, currentUserRole }) {
           role: localRoles?.[u.id] || u.role,
         }));
         setUsers(merged);
-        setSupabaseConnected(false);
+        setDbConnected(false);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -71,7 +71,7 @@ export default function AdminPanel({ currentUserId, currentUserRole }) {
   const handleRoleChange = useCallback(async (userId, newRole) => {
     setSaving(userId);
 
-    if (supabaseConnected) {
+    if (dbConnected) {
       try {
         const res = await fetch('/api/admin/users', {
           method: 'PATCH',
@@ -94,7 +94,7 @@ export default function AdminPanel({ currentUserId, currentUserRole }) {
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
     showToast(`Роль обновлена`, 'ok');
     setSaving(null);
-  }, [supabaseConnected]);
+  }, [dbConnected]);
 
   function showToast(msg, type = 'ok') {
     setToast({ msg, type });
@@ -117,11 +117,11 @@ export default function AdminPanel({ currentUserId, currentUserRole }) {
       </header>
 
       {/* Connection status */}
-      {!supabaseConnected && (
+      {!dbConnected && (
         <div className="mb-6 px-4 py-3 rounded-xl border border-craft-orange/20 bg-craft-orange/[0.04]">
-          <div className="text-[12px] text-craft-orange font-medium mb-0.5">Supabase не подключён</div>
+          <div className="text-[12px] text-craft-orange font-medium mb-0.5">БД не подключена</div>
           <div className="text-[11px] text-white/30">
-            Изменения ролей сохраняются в localStorage. Подключите Supabase для постоянного хранения.
+            Изменения ролей сохраняются в localStorage. Подключите базу данных для постоянного хранения.
           </div>
         </div>
       )}

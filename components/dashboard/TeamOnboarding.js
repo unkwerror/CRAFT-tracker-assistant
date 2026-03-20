@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 export default function TeamOnboarding() {
   const [team, setTeam] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [supabaseConnected, setSupabaseConnected] = useState(false);
+  const [dbConnected, setDbConnected] = useState(false);
 
   useEffect(() => {
     // Try API first
@@ -15,11 +15,11 @@ export default function TeamOnboarding() {
       })
       .then(data => {
         setTeam(data.users || []);
-        setSupabaseConnected(true);
+        setDbConnected(true);
       })
       .catch(() => {
-        // No Supabase — empty state
-        setSupabaseConnected(false);
+        // No Database — empty state
+        setDbConnected(false);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -39,7 +39,7 @@ export default function TeamOnboarding() {
         <div className="px-5 py-8 flex justify-center">
           <div className="w-5 h-5 border-2 border-white/5 border-t-white/20 rounded-full animate-spin" />
         </div>
-      ) : !supabaseConnected ? (
+      ) : !dbConnected ? (
         <div className="px-5 py-8 text-center">
           <div className="w-10 h-10 mx-auto mb-3 rounded-xl bg-white/[0.03] flex items-center justify-center">
             <svg className="w-5 h-5 text-white/10" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.2">
@@ -47,7 +47,7 @@ export default function TeamOnboarding() {
               <path d="M2 17c0-3 2.5-5 5-5s5 2 5 5M8 17c0-3 2.5-5 5-5s5 2 5 5" />
             </svg>
           </div>
-          <div className="text-[13px] text-white/25 mb-1">Supabase не подключён</div>
+          <div className="text-[13px] text-white/25 mb-1">БД не подключена</div>
           <div className="text-2xs text-white/15">Прогресс команды появится после подключения базы данных</div>
         </div>
       ) : team.length === 0 ? (

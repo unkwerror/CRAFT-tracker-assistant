@@ -1,6 +1,6 @@
 'use client';
 
-export default function SystemStatus({ trackerConnected = false }) {
+export default function SystemStatus({ trackerConnected = false, dbConnected = false }) {
   const items = [
     {
       label: 'Яндекс Трекер',
@@ -8,13 +8,13 @@ export default function SystemStatus({ trackerConnected = false }) {
       detail: trackerConnected ? 'API подключён' : 'Нужен TRACKER_ORG_ID',
     },
     {
-      label: 'Supabase',
-      connected: false, // TODO: pass from server
-      detail: 'Нужны SUPABASE_URL и ключи',
+      label: 'База данных',
+      connected: dbConnected,
+      detail: dbConnected ? 'PostgreSQL подключён' : 'Нужен DATABASE_URL',
     },
     {
       label: 'OAuth Яндекс',
-      connected: true, // if user is logged in, it works
+      connected: true,
       detail: 'Авторизация работает',
     },
   ];

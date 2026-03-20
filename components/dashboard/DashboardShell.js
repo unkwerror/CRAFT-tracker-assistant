@@ -19,7 +19,7 @@ export const WIDGET_REGISTRY = {
   onboarding:        { title: 'Онбординг',            desc: 'Чеклист для новых сотрудников',                size: 'half', minRole: null,       component: (p) => <OnboardingWidget userId={p.userId} /> },
   team_onboarding:   { title: 'Онбординг команды',    desc: 'Прогресс онбординга всех сотрудников',         size: 'full', minRole: 'exdir',    component: (p) => <TeamOnboarding /> },
   quick_links:       { title: 'Быстрые ссылки',       desc: 'Ссылки на Трекер, доски, создание задач',      size: 'half', minRole: null,       component: (p) => <QuickLinks queues={p.queues} /> },
-  system_status:     { title: 'Статус системы',        desc: 'Подключения к Трекеру и Supabase',             size: 'half', minRole: null,       component: (p) => <SystemStatus {...p} /> },
+  system_status:     { title: 'Статус системы',        desc: 'Подключения к Трекеру и БД',                   size: 'half', minRole: null,       component: (p) => <SystemStatus {...p} /> },
 };
 
 const ROLE_LEVEL = { director: 5, exdir: 4, gip: 3, manager: 2, architect: 1, admin: 4 };
@@ -38,6 +38,7 @@ export default function DashboardShell({ user }) {
   const role = user?.role || 'architect';
   const config = ROLE_DASHBOARD[role] || ROLE_DASHBOARD.architect;
   const trackerConnected = !!user?.trackerConnected;
+  const dbConnected = !!user?.dbConnected;
   const userLevel = ROLE_LEVEL[role] || 1;
 
   const [widgets, setWidgets] = useState(config.widgets);
@@ -86,7 +87,7 @@ export default function DashboardShell({ user }) {
   };
 
   const available = Object.entries(WIDGET_REGISTRY).filter(([, w]) => !w.minRole || userLevel >= (ROLE_LEVEL[w.minRole] || 0));
-  const widgetProps = { trackerConnected, userId: user?.id, queues: user?.queues || [] };
+  const widgetProps = { trackerConnected, dbConnected, userId: user?.id, queues: user?.queues || [] };
 
   const hour = new Date().getHours();
   const greet = hour < 6 ? 'Доброй ночи' : hour < 12 ? 'Доброе утро' : hour < 18 ? 'Добрый день' : 'Добрый вечер';
@@ -135,7 +136,7 @@ export default function DashboardShell({ user }) {
         </div>
       </div>
 
-      {/* Widget grid — full workspace */}
+      {/* Widget grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {widgets.map((id, i) => {
           const w = WIDGET_REGISTRY[id];
@@ -154,7 +155,7 @@ export default function DashboardShell({ user }) {
               onDrop={(e) => handleDrop(e, id)}
               className={`
                 ${w.size === 'full' ? 'lg:col-span-2' : ''}
-                transition-all duration-500 cubic-bezier(0.16, 1, 0.3, 1) cursor-grab active:cursor-grabbing
+                transition-all duration-500 cursor-grab active:cursor-grabbing
                 ${isOver ? 'drag-over rounded-xl' : ''}
               `}
               style={{

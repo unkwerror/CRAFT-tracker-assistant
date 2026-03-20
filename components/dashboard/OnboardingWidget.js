@@ -18,30 +18,30 @@ const KEY = 'craft_onboarding';
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
 const save = (p) => localStorage.setItem(KEY, JSON.stringify(p));
 
-export default function OnboardingWidget({ userId, useSupabase = false }) {
+export default function OnboardingWidget({ userId, useDb = false }) {
   const [progress, setProgress] = useState({});
   const [expanded, setExpanded] = useState(false);
   const [justToggled, setJustToggled] = useState(null);
 
   useEffect(() => {
-    if (useSupabase) {
+    if (useDb) {
       fetch('/api/onboarding').then(r => r.json())
         .then(data => { const m = {}; (data.steps||[]).forEach(s => { if(s.completed) m[s.step_id]=true; }); setProgress(m); })
         .catch(() => setProgress(load()));
     } else { setProgress(load()); }
-  }, [useSupabase]);
+  }, [useDb]);
 
   const toggle = useCallback((id) => {
     setJustToggled(id);
     setTimeout(() => setJustToggled(null), 400);
     setProgress(prev => {
       const next = { ...prev, [id]: !prev[id] };
-      if (useSupabase) {
+      if (useDb) {
         fetch('/api/onboarding', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ step_id: id, completed: next[id] }) }).catch(() => {});
       } else { save(next); }
       return next;
     });
-  }, [useSupabase]);
+  }, [useDb]);
 
   const done = Object.values(progress).filter(Boolean).length;
   const total = STEPS.length;

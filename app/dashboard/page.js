@@ -17,7 +17,7 @@ export default async function DashboardPage() {
     roleColor: role.color,
     queues: role.queues,
     trackerConnected: !!process.env.TRACKER_ORG_ID,
-    supabaseConnected: !!process.env.SUPABASE_URL,
+    dbConnected: !!process.env.DATABASE_URL,
   };
 
   return <DashboardShell user={user} />;
