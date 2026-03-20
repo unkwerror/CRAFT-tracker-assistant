@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ResponsiveLine } from '@nivo/line';
 import { motion } from 'framer-motion';
 import WidgetDebugBadge from './WidgetDebugBadge';
@@ -64,7 +64,7 @@ export default function CrmTimeline({ trackerConnected = false }) {
 
   const pulseSeries = buildPulseSeries(events, 14);
   const yMax = Math.max(...pulseSeries.map((p) => Number(p.value || 0)), 1);
-  const yTicks = useMemo(() => buildYAxisTicks(yMax), [yMax]);
+  const yTicks = buildYAxisTicks(yMax);
   const isCompact = chartWidth > 0 && chartWidth < 420;
   const xTickEvery = isCompact ? 3 : 2;
   const xTickValues = pulseSeries
