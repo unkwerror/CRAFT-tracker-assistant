@@ -1,9 +1,10 @@
+// ═══ /api/onboarding — прогресс онбординга ═══
+
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/session.mjs';
 import { isDbConnected, getOnboardingProgress, upsertOnboardingStep } from '@/lib/db.mjs';
 import { ONBOARDING_STEPS } from '@/lib/config.mjs';
 
-// GET — получить прогресс
 export async function GET() {
   const session = await getSession();
   if (!session) {
@@ -11,7 +12,7 @@ export async function GET() {
   }
 
   if (!isDbConnected()) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
+    return NextResponse.json({ error: 'DB not configured' }, { status: 503 });
   }
 
   try {
@@ -39,7 +40,6 @@ export async function GET() {
   }
 }
 
-// PATCH — отметить шаг
 export async function PATCH(request) {
   const session = await getSession();
   if (!session) {
@@ -47,7 +47,7 @@ export async function PATCH(request) {
   }
 
   if (!isDbConnected()) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
+    return NextResponse.json({ error: 'DB not configured' }, { status: 503 });
   }
 
   const { step_id, completed } = await request.json();

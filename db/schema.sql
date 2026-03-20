@@ -1,6 +1,6 @@
 -- ═══════════════════════════════════════════════════════
 -- Крафт Ассистент — Схема БД
--- Версия: 3.0 (Март 2026)
+-- Версия: 4.0 (Март 2026)
 --
 -- Запуск полной миграции:
 --   psql $DATABASE_URL -f db/schema.sql
@@ -31,15 +31,9 @@ CREATE INDEX IF NOT EXISTS idx_users_yandex ON users(yandex_uid);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 
-COMMENT ON TABLE users IS 'Пользователи системы, создаются при первом OAuth-логине';
-COMMENT ON COLUMN users.role IS 'Ключ роли: director, exdir, gip, architect, manager, admin';
-COMMENT ON COLUMN users.office IS 'Офис: tyumen, ekaterinburg';
-COMMENT ON COLUMN users.is_active IS 'Деактивированный пользователь не может войти';
-
 
 -- ─────────────────────────────────────
 -- 2. НАСТРОЙКИ ПОЛЬЗОВАТЕЛЯ
--- Заменяет localStorage — синхронизируется между устройствами
 -- ─────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS user_settings (
@@ -55,12 +49,9 @@ CREATE TABLE IF NOT EXISTS user_settings (
   updated_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
-COMMENT ON TABLE user_settings IS 'Персональные настройки, одна строка на пользователя';
-
 
 -- ─────────────────────────────────────
 -- 3. РОЛИ И ПРАВА
--- Роли из БД, не из кода — можно добавлять без деплоя
 -- ─────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS roles (
@@ -74,12 +65,6 @@ CREATE TABLE IF NOT EXISTS roles (
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
-COMMENT ON TABLE roles IS 'Справочник ролей. is_system=true нельзя удалить';
-COMMENT ON COLUMN roles.key IS 'Уникальный ключ: director, exdir, gip, architect, manager, admin';
-COMMENT ON COLUMN roles.level IS 'Числовой уровень для сравнений: director=5, architect=1';
-COMMENT ON COLUMN roles.queues IS 'Доступ к очередям: ["CRM:full","PROJ:read"]';
-
--- Начальные роли (идемпотентно)
 INSERT INTO roles (key, label, color, level, queues, is_system) VALUES
   ('director',  'Генеральный директор',       '#5BA4F5', 5, '["CRM:read","PROJ:read","DOCS:read","HR:read"]', TRUE),
   ('exdir',     'Исполнительный директор',     '#C9A0FF', 4, '["CRM:full","PROJ:full","DOCS:full","HR:full"]', TRUE),
@@ -92,7 +77,6 @@ ON CONFLICT (key) DO NOTHING;
 
 -- ─────────────────────────────────────
 -- 4. РЕЕСТР ВИДЖЕТОВ
--- Виджеты из БД — можно добавлять без деплоя
 -- ─────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS widgets (
@@ -102,6 +86,7 @@ CREATE TABLE IF NOT EXISTS widgets (
   description   TEXT,
   size          TEXT DEFAULT 'half',
   component     TEXT NOT NULL,
+  default_settings JSONB DEFAULT '{}',
   allowed_roles JSONB DEFAULT '["*"]',
   default_for   JSONB DEFAULT '[]',
   is_active     BOOLEAN DEFAULT TRUE,
@@ -109,53 +94,112 @@ CREATE TABLE IF NOT EXISTS widgets (
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
-COMMENT ON TABLE widgets IS 'Реестр доступных виджетов дашборда';
-COMMENT ON COLUMN widgets.key IS 'Уникальный ключ: my_tasks, crm_widget, audit';
-COMMENT ON COLUMN widgets.component IS 'Имя React-компонента: TasksWidget, CrmWidget';
-COMMENT ON COLUMN widgets.allowed_roles IS 'Роли с доступом: ["*"] = все, ["manager","exdir"] = конкретные';
-COMMENT ON COLUMN widgets.default_for IS 'Роли для которых виджет включён по умолчанию при первом логине';
-COMMENT ON COLUMN widgets.size IS 'Размер на сетке: half (1 колонка), full (2 колонки)';
-
--- Начальные виджеты
-INSERT INTO widgets (key, title, description, size, component, allowed_roles, default_for, sort_order) VALUES
-  ('my_tasks',          'Мои задачи',          'Задачи из Трекера, назначенные на вас',        'half', 'TasksWidget',       '["*"]',                                        '["*"]',                                10),
-  ('quick_links',       'Быстрые ссылки',      'Ссылки на Трекер, доски, создание задач',      'half', 'QuickLinks',        '["*"]',                                        '["*"]',                                20),
-  ('onboarding',        'Онбординг',            'Чеклист для новых сотрудников',                'half', 'OnboardingWidget',  '["*"]',                                        '["*"]',                                30),
-  ('system_status',     'Статус системы',        'Подключения к Трекеру и БД',                   'half', 'SystemStatus',      '["*"]',                                        '["exdir","admin"]',                    90),
-  ('crm_widget',        'CRM — Воронка',         'Канбан или список лидов из CRM-очереди',       'full', 'CrmWidget',         '["manager","exdir","director"]',               '["manager","exdir"]',                  15),
-  ('project_tasks',     'Задачи проектов',      'Все задачи ваших проектов',                    'half', 'TasksWidget',       '["gip","architect","exdir","director"]',        '["gip"]',                              25),
-  ('audit',             'Аудит качества',       'Без дедлайна, зависшие, просроченные',         'full', 'AuditWidget',       '["gip","exdir","director"]',                   '["gip","exdir"]',                      40),
-  ('portfolio_summary', 'Портфель проектов',    'Обзор всех проектов бюро',                     'full', 'PortfolioSummary',  '["exdir","director"]',                         '["exdir","director"]',                 50),
-  ('team_onboarding',   'Онбординг команды',    'Прогресс онбординга всех сотрудников',         'full', 'TeamOnboarding',    '["exdir","admin"]',                            '["exdir"]',                            60)
+INSERT INTO widgets (key, title, description, size, component, default_settings, allowed_roles, default_for, sort_order) VALUES
+  ('stats_bar',         'Сводка',              'Ключевые метрики в реальном времени',          'full', 'StatsBar',          '{}',                                           '["*"]',                                        '["*"]',                                5),
+  ('tasks_my',          'Мои задачи',          'Задачи из Трекера, назначенные на вас',        'half', 'TasksWidget',       '{"queue":null,"filter":"assignee=me"}',        '["*"]',                                        '["*"]',                                10),
+  ('tasks_crm',         'CRM — Лиды',          'Задачи из CRM-очереди',                        'half', 'TasksWidget',       '{"queue":"CRM"}',                              '["manager","exdir","director"]',               '["manager","exdir"]',                  12),
+  ('kanban_crm',        'CRM — Воронка',       'Канбан-доска CRM с drag-and-drop',             'full', 'CrmKanban',         '{"queue":"CRM"}',                              '["manager","exdir","director"]',               '["manager","exdir"]',                  15),
+  ('tasks_proj',        'Задачи проектов',     'Задачи из PROJ-очереди',                       'half', 'TasksWidget',       '{"queue":"PROJ"}',                             '["gip","architect","exdir","director"]',        '["gip"]',                              20),
+  ('quick_links',       'Быстрые ссылки',      'Ссылки на Трекер, доски, создание задач',      'half', 'QuickLinks',        '{}',                                           '["*"]',                                        '["*"]',                                25),
+  ('onboarding',        'Онбординг',            'Чеклист для новых сотрудников',                'half', 'OnboardingWidget',  '{}',                                           '["*"]',                                        '["*"]',                                30),
+  ('funnel_crm',        'Воронка CRM',         'Визуализация воронки продаж',                  'half', 'FunnelChart',       '{"queue":"CRM"}',                              '["manager","exdir","director"]',               '["manager","exdir"]',                  35),
+  ('audit',             'Аудит качества',       'Без дедлайна, зависшие, просроченные',         'full', 'AuditWidget',       '{}',                                           '["gip","exdir","director"]',                   '["gip","exdir"]',                      40),
+  ('portfolio_summary', 'Портфель проектов',    'Обзор всех проектов бюро',                     'full', 'PortfolioSummary',  '{}',                                           '["exdir","director"]',                         '["exdir","director"]',                 50),
+  ('team_onboarding',   'Онбординг команды',    'Прогресс онбординга всех сотрудников',         'full', 'TeamOnboarding',    '{}',                                           '["exdir","admin"]',                            '["exdir"]',                            60),
+  ('system_status',     'Статус системы',        'Подключения к Трекеру и БД',                   'half', 'SystemStatus',      '{}',                                           '["exdir","admin"]',                            '["exdir","admin"]',                    90)
 ON CONFLICT (key) DO NOTHING;
 
 
 -- ─────────────────────────────────────
--- 5. ДОСТУП К ВИДЖЕТАМ (per user)
--- Переопределяет дефолты из widgets.default_for
+-- 5. ОЧЕРЕДИ ТРЕКЕРА (конфигурация)
 -- ─────────────────────────────────────
 
-CREATE TABLE IF NOT EXISTS widget_access (
+CREATE TABLE IF NOT EXISTS queues (
   id          SERIAL PRIMARY KEY,
-  user_id     INT REFERENCES users(id) ON DELETE CASCADE,
-  widget_id   TEXT NOT NULL REFERENCES widgets(key) ON DELETE CASCADE,
-  enabled     BOOLEAN DEFAULT TRUE,
-  settings    JSONB DEFAULT '{}',
-  granted_by  INT REFERENCES users(id) ON DELETE SET NULL,
-  granted_at  TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(user_id, widget_id)
+  key         TEXT UNIQUE NOT NULL,
+  name        TEXT NOT NULL,
+  description TEXT,
+  color       TEXT DEFAULT '#5BA4F5',
+  icon        TEXT DEFAULT 'folder',
+  statuses    JSONB DEFAULT '[]',
+  transitions JSONB DEFAULT '{}',
+  is_active   BOOLEAN DEFAULT TRUE,
+  sort_order  INT DEFAULT 100,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_widget_access_user ON widget_access(user_id);
-
-COMMENT ON TABLE widget_access IS 'Индивидуальный доступ к виджетам, задаётся из админки';
-COMMENT ON COLUMN widget_access.settings IS 'Настройки виджета: {"view":"kanban"} для CRM, {"queue":"PROJ"} для задач';
-COMMENT ON COLUMN widget_access.granted_by IS 'Кто выдал доступ (user_id админа)';
+INSERT INTO queues (key, name, description, color, icon, sort_order, statuses, transitions) VALUES
+  ('CRM', 'CRM — Продажи', 'Лиды, квалификация, КП, договоры', '#6DD8E0', 'funnel', 10,
+    '[
+      {"key":"newLead","display":"Новый лид","type":"initial","color":"#5BA4F5"},
+      {"key":"qualification","display":"Квалификация","type":"progress","color":"#C9A0FF"},
+      {"key":"proposal","display":"КП отправлено","type":"progress","color":"#FFB155"},
+      {"key":"negotiation","display":"Переговоры","type":"progress","color":"#FF9F43"},
+      {"key":"contract","display":"Договор","type":"progress","color":"#42C774"},
+      {"key":"projectOpened","display":"Проект открыт","type":"done","color":"#2ECC71"},
+      {"key":"postponed","display":"Отложен","type":"progress","color":"#7A8899"},
+      {"key":"rejected","display":"Отказ","type":"done","color":"#FF7B72"}
+    ]',
+    '{
+      "newLead":["qualification","rejected"],
+      "qualification":["proposal","postponed","rejected"],
+      "proposal":["negotiation","qualification","postponed","rejected"],
+      "negotiation":["contract","proposal","postponed","rejected"],
+      "contract":["projectOpened","negotiation","rejected"],
+      "postponed":["qualification","proposal","rejected"],
+      "rejected":["qualification"]
+    }'
+  ),
+  ('PROJ', 'Проектирование', 'Производственные задачи, объекты, стадии', '#C9A0FF', 'building', 20,
+    '[
+      {"key":"open","display":"Открыта","type":"initial","color":"#5BA4F5"},
+      {"key":"inProgress","display":"В работе","type":"progress","color":"#FFB155"},
+      {"key":"review","display":"Проверка ГИПом","type":"progress","color":"#C9A0FF"},
+      {"key":"needsInfo","display":"Требуется информация","type":"progress","color":"#6DD8E0"},
+      {"key":"closed","display":"Закрыта","type":"done","color":"#42C774"}
+    ]',
+    '{}'
+  ),
+  ('DOCS', 'Документооборот', 'Договоры, экспертизы, согласования', '#FFB155', 'file', 30,
+    '[]', '{}'
+  ),
+  ('HR', 'Кадры и быт', 'Командировки, отпуска, закупки', '#42C774', 'users', 40,
+    '[]', '{}'
+  )
+ON CONFLICT (key) DO NOTHING;
 
 
 -- ─────────────────────────────────────
--- 6. РАСКЛАДКА ДАШБОРДА
--- Порядок и расположение виджетов — вместо localStorage
+-- 6. ПОЛЯ ОЧЕРЕДЕЙ (кастомные)
+-- ─────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS queue_fields (
+  id            SERIAL PRIMARY KEY,
+  queue_key     TEXT NOT NULL REFERENCES queues(key) ON DELETE CASCADE,
+  field_key     TEXT NOT NULL,
+  label         TEXT NOT NULL,
+  type          TEXT NOT NULL DEFAULT 'text',
+  options       JSONB DEFAULT '[]',
+  required      BOOLEAN DEFAULT FALSE,
+  show_on_card  BOOLEAN DEFAULT TRUE,
+  sort_order    INT DEFAULT 100,
+  UNIQUE(queue_key, field_key)
+);
+
+INSERT INTO queue_fields (queue_key, field_key, label, type, options, required, show_on_card, sort_order) VALUES
+  ('CRM', 'leadSource',    'Источник лида',     'select', '["Сайт","Рекомендация","Тендер","Повторный клиент","Холодный звонок","Выставка","Партнёр"]', FALSE, TRUE, 10),
+  ('CRM', 'objectType',    'Тип объекта',       'select', '["Жилой дом / ЖК","Школа / Детский сад","Спортивный","Коммерческий","Административное","ОКН","Благоустройство","Мастер-план","Реконструкция","Интерьер"]', FALSE, TRUE, 20),
+  ('CRM', 'stage',         'Стадия',            'select', '["ЭП","П","РД","ПД","Полный цикл","Авторский надзор"]', FALSE, TRUE, 30),
+  ('CRM', 'area',          'Площадь объекта',   'number', '[]', FALSE, TRUE, 40),
+  ('CRM', 'budgetKP',      'Бюджет КП',         'number', '[]', FALSE, TRUE, 50),
+  ('CRM', 'contractSum',   'Сумма договора',    'number', '[]', FALSE, FALSE, 60),
+  ('CRM', 'contactPerson', 'Контактное лицо',   'text',   '[]', FALSE, TRUE, 70),
+  ('CRM', 'rejectReason',  'Причина отказа',    'select', '["Цена","Сроки","Конкурент","Нет бюджета","Заморозка","Нецелевой","Нет ресурсов","Условия"]', FALSE, FALSE, 80)
+ON CONFLICT (queue_key, field_key) DO NOTHING;
+
+
+-- ─────────────────────────────────────
+-- 7. РАСКЛАДКА ДАШБОРДА
 -- ─────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS dashboard_layouts (
@@ -165,12 +209,9 @@ CREATE TABLE IF NOT EXISTS dashboard_layouts (
   updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
-COMMENT ON TABLE dashboard_layouts IS 'Порядок виджетов на дашборде пользователя';
-COMMENT ON COLUMN dashboard_layouts.layout IS 'Массив ключей виджетов в порядке отображения: ["my_tasks","crm_widget","audit"]';
-
 
 -- ─────────────────────────────────────
--- 7. ОНБОРДИНГ
+-- 8. ОНБОРДИНГ
 -- ─────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS onboarding (
@@ -184,12 +225,9 @@ CREATE TABLE IF NOT EXISTS onboarding (
 
 CREATE INDEX IF NOT EXISTS idx_onboarding_user ON onboarding(user_id);
 
-COMMENT ON TABLE onboarding IS 'Прогресс онбординга: 10 шагов на пользователя';
-
 
 -- ─────────────────────────────────────
--- 8. ЖУРНАЛ ДЕЙСТВИЙ (AUDIT LOG)
--- Кто, что, когда — для безопасности и отчётности
+-- 9. ЖУРНАЛ ДЕЙСТВИЙ (AUDIT LOG)
 -- ─────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -208,20 +246,9 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);
 CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at DESC);
 
-COMMENT ON TABLE audit_log IS 'Журнал всех значимых действий в системе';
-COMMENT ON COLUMN audit_log.action IS 'Действие: role_changed, widget_granted, user_deactivated, login, logout';
-COMMENT ON COLUMN audit_log.entity_type IS 'Тип сущности: user, widget, onboarding, setting';
-COMMENT ON COLUMN audit_log.entity_id IS 'ID сущности (строка для универсальности)';
-
--- Примеры записей audit_log:
--- action='role_changed',    entity_type='user', entity_id='5', old_value='{"role":"architect"}', new_value='{"role":"gip"}'
--- action='widget_granted',  entity_type='widget', entity_id='crm_widget', new_value='{"user_id":5}'
--- action='login',           entity_type='user', entity_id='3', new_value='{"ip":"1.2.3.4"}'
-
 
 -- ─────────────────────────────────────
--- 9. УВЕДОМЛЕНИЯ (IN-APP)
--- Для будущих уведомлений внутри дашборда
+-- 10. УВЕДОМЛЕНИЯ (IN-APP)
 -- ─────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS notifications (
@@ -238,23 +265,19 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at DESC);
 
-COMMENT ON TABLE notifications IS 'In-app уведомления на дашборде';
-COMMENT ON COLUMN notifications.type IS 'Тип: info, warning, success, error';
-COMMENT ON COLUMN notifications.link IS 'Ссылка при клике: /dashboard, /admin, https://tracker.yandex.ru/CRM-15';
-
 
 -- ═══════════════════════════════════════════════════════
--- ДИАГРАММА СВЯЗЕЙ
+-- СВЯЗИ
 -- ═══════════════════════════════════════════════════════
 --
 --  users ─────┬──── user_settings     (1:1)
 --             ├──── onboarding         (1:N)
---             ├──── widget_access      (1:N) ──── widgets
 --             ├──── dashboard_layouts  (1:1)
 --             ├──── audit_log          (1:N)
---             └──── notifications      (1:N)
+--             └──── notifications     (1:N)
 --
---  roles      ←──── users.role (FK по ключу, не по id)
---  widgets    ←──── widget_access.widget_id (FK по ключу)
+--  roles      ←──── users.role
+--  widgets    (standalone registry, access via allowed_roles jsonb)
+--  queues     ←──── queue_fields.queue_key
 --
 -- ═══════════════════════════════════════════════════════

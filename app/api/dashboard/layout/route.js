@@ -1,45 +1,57 @@
+// ═══ /api/dashboard/layout — раскладка виджетов пользователя ═══
+
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/session.mjs';
 import { isDbConnected, getWidgetsForRole, getDefaultWidgetsForRole, getDashboardLayout, saveDashboardLayout } from '@/lib/db.mjs';
 
-// GET /api/dashboard/layout
 export async function GET() {
   const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!session) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
 
   if (!isDbConnected()) {
-    return NextResponse.json({ layout: [], enabledKeys: [] });
+    return NextResponse.json({ layout: [], enabledKeys: [], widgetMeta: {} });
   }
 
   try {
-    // Get widgets available for this role (from widgets.allowed_roles)
     const available = await getWidgetsForRole(session.role);
+    const savedLayout = await getDashboardLayout(session.uid);
     const enabledKeys = available.map(w => w.key);
 
-    // Get saved layout
-    const savedLayout = await getDashboardLayout(session.uid);
-
-    // If user has a saved layout, filter to only available widgets
     let layout;
     if (savedLayout && savedLayout.length > 0) {
       layout = savedLayout.filter(key => enabledKeys.includes(key));
     } else {
-      // First visit: use defaults for this role
       layout = await getDefaultWidgetsForRole(session.role);
     }
 
-    return NextResponse.json({ layout, enabledKeys });
+    const widgetMeta = {};
+    for (const w of available) {
+      widgetMeta[w.key] = {
+        title: w.title,
+        description: w.description,
+        size: w.size,
+        component: w.component,
+        defaultSettings: w.default_settings || {},
+      };
+    }
+
+    return NextResponse.json({ layout, enabledKeys, widgetMeta });
   } catch (err) {
     console.error('Layout API error:', err.message);
-    return NextResponse.json({ layout: [], enabledKeys: [] });
+    return NextResponse.json({ layout: [], enabledKeys: [], widgetMeta: {} });
   }
 }
 
-// PATCH /api/dashboard/layout
 export async function PATCH(request) {
   const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-  if (!isDbConnected()) return NextResponse.json({ error: 'DB not configured' }, { status: 503 });
+  if (!session) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
+  if (!isDbConnected()) {
+    return NextResponse.json({ error: 'DB not configured' }, { status: 503 });
+  }
 
   try {
     const { layout } = await request.json();

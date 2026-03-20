@@ -1,7 +1,10 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { ROLE_DASHBOARD } from '@/lib/dashboard-config.mjs';
-import TasksWidget from './TasksWidget';
+import QueueTasks from './QueueTasks';
+import CrmKanban from './CrmKanban';
+import StatsBar from './StatsBar';
+import FunnelChart from './FunnelChart';
 import AuditWidget from './AuditWidget';
 import OnboardingWidget from './OnboardingWidget';
 import QuickLinks from './QuickLinks';
@@ -10,20 +13,68 @@ import TeamOnboarding from './TeamOnboarding';
 import SystemStatus from './SystemStatus';
 import WidgetPicker from './WidgetPicker';
 
-// ── Component registry ──
-// Components live client-side, DB stores only keys.
-// Map: widget_key → { render, title, desc, size }
+/**
+ * Widget registry: maps widget key → { render, title, desc, size }.
+ * Keys must match both the DB `widgets.key` column and the legacy
+ * `ROLE_DASHBOARD` config. Legacy aliases (my_tasks, crm_widget, etc.)
+ * point to the same components so old layouts keep working.
+ */
 const WIDGET_REGISTRY = {
-  my_tasks:          { render: (p) => <TasksWidget title="Мои задачи" {...p} />,        title: 'Мои задачи',        desc: 'Задачи из Трекера',                 size: 'half' },
-  project_tasks:     { render: (p) => <TasksWidget title="Задачи проектов" {...p} />,   title: 'Задачи проектов',   desc: 'Все задачи ваших проектов',         size: 'half' },
-  crm_widget:        { render: (p) => <TasksWidget title="CRM — лиды" {...p} />,        title: 'CRM — Воронка',     desc: 'Лиды и сделки из CRM',              size: 'full' },
-  crm_summary:       { render: (p) => <TasksWidget title="CRM — лиды" {...p} />,        title: 'CRM — лиды',        desc: 'Ваши лиды из CRM-очереди',          size: 'half' },
-  portfolio_summary: { render: (p) => <PortfolioSummary {...p} />,                       title: 'Портфель проектов', desc: 'Обзор всех проектов бюро',          size: 'full' },
-  audit:             { render: (p) => <AuditWidget {...p} />,                            title: 'Аудит качества',    desc: 'Без дедлайна, зависшие, просрочки', size: 'full' },
-  onboarding:        { render: (p) => <OnboardingWidget userId={p.userId} />,            title: 'Онбординг',         desc: 'Чеклист для новых сотрудников',     size: 'half' },
-  team_onboarding:   { render: ()  => <TeamOnboarding />,                                title: 'Онбординг команды', desc: 'Прогресс онбординга всех',          size: 'full' },
-  quick_links:       { render: (p) => <QuickLinks queues={p.queues} />,                  title: 'Быстрые ссылки',    desc: 'Ссылки на Трекер и доски',          size: 'half' },
-  system_status:     { render: (p) => <SystemStatus {...p} />,                           title: 'Статус системы',    desc: 'Подключения к Трекеру и БД',        size: 'half' },
+  // ── DB keys (canonical) ──
+  stats_bar: {
+    render: (p) => <StatsBar trackerConnected={p.trackerConnected} />,
+    title: 'Сводка', desc: 'Ключевые метрики', size: 'full',
+  },
+  tasks_my: {
+    render: (p) => <QueueTasks title="Мои задачи" trackerConnected={p.trackerConnected} emptyMessage="Нет активных задач" />,
+    title: 'Мои задачи', desc: 'Задачи из Трекера', size: 'half',
+  },
+  tasks_crm: {
+    render: (p) => <QueueTasks title="CRM — Лиды" queueKey="CRM" trackerConnected={p.trackerConnected} emptyMessage="Нет лидов" />,
+    title: 'CRM — лиды', desc: 'Задачи из CRM-очереди', size: 'half',
+  },
+  kanban_crm: {
+    render: (p) => <CrmKanban trackerConnected={p.trackerConnected} />,
+    title: 'CRM — Воронка', desc: 'Канбан лидов из CRM', size: 'full',
+  },
+  tasks_proj: {
+    render: (p) => <QueueTasks title="Задачи проектов" queueKey="PROJ" trackerConnected={p.trackerConnected} emptyMessage="Нет задач в проектах" />,
+    title: 'Задачи проектов', desc: 'Все задачи ваших проектов', size: 'half',
+  },
+  funnel_crm: {
+    render: (p) => <FunnelChart trackerConnected={p.trackerConnected} />,
+    title: 'Воронка CRM', desc: 'Визуализация воронки продаж', size: 'half',
+  },
+  quick_links: {
+    render: (p) => <QuickLinks queues={p.queues} />,
+    title: 'Быстрые ссылки', desc: 'Ссылки на Трекер и доски', size: 'half',
+  },
+  onboarding: {
+    render: (p) => <OnboardingWidget userId={p.userId} />,
+    title: 'Онбординг', desc: 'Чеклист для новых сотрудников', size: 'half',
+  },
+  audit: {
+    render: (p) => <AuditWidget {...p} />,
+    title: 'Аудит качества', desc: 'Без дедлайна, зависшие, просрочки', size: 'full',
+  },
+  portfolio_summary: {
+    render: (p) => <PortfolioSummary {...p} />,
+    title: 'Портфель проектов', desc: 'Обзор всех проектов бюро', size: 'full',
+  },
+  team_onboarding: {
+    render: () => <TeamOnboarding />,
+    title: 'Онбординг команды', desc: 'Прогресс онбординга всех', size: 'full',
+  },
+  system_status: {
+    render: (p) => <SystemStatus {...p} />,
+    title: 'Статус системы', desc: 'Подключения к Трекеру и БД', size: 'half',
+  },
+
+  // ── Legacy aliases (backwards-compat with ROLE_DASHBOARD) ──
+  get my_tasks() { return WIDGET_REGISTRY.tasks_my; },
+  get project_tasks() { return WIDGET_REGISTRY.tasks_proj; },
+  get crm_widget() { return WIDGET_REGISTRY.kanban_crm; },
+  get crm_summary() { return WIDGET_REGISTRY.tasks_crm; },
 };
 
 export { WIDGET_REGISTRY };
@@ -42,7 +93,6 @@ export default function DashboardShell({ user }) {
   const [dragId, setDragId] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
 
-  // ── Load layout from DB ──
   useEffect(() => {
     let cancelled = false;
 
@@ -71,7 +121,6 @@ export default function DashboardShell({ user }) {
     return () => { cancelled = true; };
   }, [role]);
 
-  // ── Persist layout to DB (fire-and-forget) ──
   const persistLayout = useCallback((layout) => {
     fetch('/api/dashboard/layout', {
       method: 'PATCH',
@@ -91,7 +140,6 @@ export default function DashboardShell({ user }) {
     persistLayout(defaults);
   }, [enabledKeys, fallback.widgets, persistLayout]);
 
-  // ── Drag handlers ──
   const onDragStart = (e, id) => {
     setDragId(id);
     e.dataTransfer.effectAllowed = 'move';
@@ -121,7 +169,6 @@ export default function DashboardShell({ user }) {
     setDragOverId(null);
   };
 
-  // ── Build picker list from enabled keys ──
   const available = enabledKeys
     .map(key => WIDGET_REGISTRY[key] ? [key, WIDGET_REGISTRY[key]] : null)
     .filter(Boolean);
@@ -130,7 +177,6 @@ export default function DashboardShell({ user }) {
   const hour = new Date().getHours();
   const greet = hour < 6 ? 'Доброй ночи' : hour < 12 ? 'Доброе утро' : hour < 18 ? 'Добрый день' : 'Добрый вечер';
 
-  // ── Render ──
   return (
     <div className="min-h-screen pb-8">
       <header
@@ -138,7 +184,7 @@ export default function DashboardShell({ user }) {
         style={mounted ? { opacity: 1, transform: 'translateY(0)' } : {}}
       >
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-2xs uppercase tracking-[0.12em] text-white/20">{fallback.label}</span>
+          <span className="text-2xs uppercase tracking-[0.12em] text-white/20">{user?.roleLabel || fallback.label}</span>
           <span className="text-white/8">/</span>
           <span className="text-2xs text-white/12">{fallback.greeting}</span>
         </div>

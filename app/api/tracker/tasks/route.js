@@ -1,8 +1,8 @@
-// ═══ /api/tracker/tasks — получить задачи текущего пользователя ═══
+// ═══ /api/tracker/tasks — задачи из Яндекс Трекера ═══
 
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/session.mjs';
-import { TrackerClient } from '@/lib/tracker.mjs';
+import { TrackerClient, normalizeIssue } from '@/lib/tracker.mjs';
 
 export async function GET(request) {
   const session = await getSession();
@@ -11,9 +11,10 @@ export async function GET(request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const queue = searchParams.get('queue');    // опционально: CRM, PROJ, DOCS, HR
-  const status = searchParams.get('status');  // опционально: inProgress, open, etc.
+  const queue = searchParams.get('queue');    // CRM, PROJ, DOCS, HR
+  const status = searchParams.get('status');
   const type = searchParams.get('type');      // my | overdue | stale | no_deadline
+  const assigneeMe = searchParams.get('assigneeMe') !== 'false'; // для CRM: false = все лиды
 
   const tracker = new TrackerClient(session.tracker_token, process.env.TRACKER_ORG_ID);
 
@@ -32,31 +33,17 @@ export async function GET(request) {
         break;
       default:
         if (queue) {
-          const filter = { assignee: 'me' };
-          if (status) filter.status = status;
-          tasks = await tracker.getQueueTasks(queue, filter);
+          // CRM: все лиды (assigneeMe=false), PROJ: только мои
+          tasks = await tracker.getQueueTasks(queue, {
+            assigneeMe: queue === 'CRM' ? false : assigneeMe,
+            status: status || null,
+          });
         } else {
           tasks = await tracker.getMyTasks(status);
         }
     }
 
-    // Нормализовать данные для фронтенда
-    const normalized = (tasks || []).map(t => ({
-      key: t.key,
-      summary: t.summary,
-      status: t.status?.display,
-      statusKey: t.status?.key,
-      priority: t.priority?.display,
-      type: t.type?.display,
-      deadline: t.deadline,
-      assignee: t.assignee?.display,
-      queue: t.queue?.key,
-      components: (t.components || []).map(c => c.display),
-      createdAt: t.createdAt,
-      updatedAt: t.updatedAt,
-      url: `https://tracker.yandex.ru/${t.key}`,
-    }));
-
+    const normalized = (tasks || []).map(normalizeIssue);
     return NextResponse.json({ tasks: normalized, count: normalized.length });
 
   } catch (error) {

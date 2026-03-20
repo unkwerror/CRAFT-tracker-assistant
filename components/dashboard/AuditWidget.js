@@ -19,13 +19,13 @@ export default function AuditWidget({ trackerConnected = false }) {
       return;
     }
     Promise.all(
-      AUDIT_TABS.map(t =>
+      AUDIT_TABS.map((t) =>
         fetch(`/api/tracker/tasks?type=${t.id}`)
-          .then(r => r.json())
-          .then(d => ({ [t.id]: d.tasks || [] }))
+          .then((r) => r.json())
+          .then((d) => ({ [t.id]: d.tasks || [] }))
           .catch(() => ({ [t.id]: [] }))
       )
-    ).then(results => {
+    ).then((results) => {
       setData(Object.assign({}, ...results));
       setLoading(false);
     });
@@ -63,7 +63,7 @@ export default function AuditWidget({ trackerConnected = false }) {
         <>
           {/* Tabs */}
           <div className="flex gap-0.5 px-4 pt-3 pb-1">
-            {AUDIT_TABS.map(t => (
+            {AUDIT_TABS.map((t) => (
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}

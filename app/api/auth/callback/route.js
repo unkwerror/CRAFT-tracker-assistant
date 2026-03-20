@@ -1,6 +1,8 @@
+// ═══ /api/auth/callback — OAuth callback Яндекс ═══
+
 import { NextResponse } from 'next/server';
 import { createSession } from '@/lib/session.mjs';
-import { isDbConnected, findUserByYandexUid, createUser, updateUserLogin, createOnboardingSteps, initUserWidgets } from '@/lib/db.mjs';
+import { isDbConnected, findUserByYandexUid, createUser, updateUserLogin, createOnboardingSteps } from '@/lib/db.mjs';
 import { EMAIL_ROLE_MAP } from '@/lib/config.mjs';
 
 function getBaseUrl(request) {
@@ -93,16 +95,7 @@ export async function GET(request) {
           });
           userId = newUser.id;
           userRole = newUser.role;
-
-          // Init onboarding steps
           await createOnboardingSteps(newUser.id);
-
-          // Init default widgets for this role
-          try {
-            await initUserWidgets(newUser.id, userRole);
-          } catch (e) {
-            console.warn('Widget init failed (non-critical):', e.message);
-          }
         }
       } catch (dbErr) {
         console.error('DB error (fallback to session):', dbErr.message);
@@ -118,7 +111,6 @@ export async function GET(request) {
     });
 
     return NextResponse.redirect(new URL('/dashboard', base));
-
   } catch (error) {
     console.error('Auth error:', error);
     return NextResponse.redirect(new URL('/login?error=unknown', base));
