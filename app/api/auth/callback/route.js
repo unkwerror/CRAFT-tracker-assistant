@@ -1,16 +1,7 @@
-/*
- * GET /api/auth/callback
- *
- * Яндекс OAuth перенаправляет сюда после авторизации.
- * 
- * Режимы:
- * - С Supabase: полный флоу (БД + Трекер)
- * - Без Supabase: сохраняет только в JWT (для разработки)
- * - Без TRACKER_ORG_ID: пропускает проверку Трекера
- */
-
 import { NextResponse } from 'next/server';
 import { createSession } from '@/lib/session.mjs';
+import { isDbConnected, findUserByYandexUid, createUser, updateUserLogin, createOnboardingSteps } from '@/lib/db.mjs';
+import { EMAIL_ROLE_MAP } from '@/lib/config.mjs';
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
@@ -66,65 +57,48 @@ export async function GET(request) {
       }
     }
 
-    // ═══ 4. Сохранить в БД (если Supabase подключён) ═══
-    let userId = yandexUser.id; // fallback: yandex uid
-    let userRole = 'architect';  // default role
+    // ═══ 4. Сохранить в БД (если DATABASE_URL задан) ═══
+    let userId = yandexUser.id;
+    let userRole = 'architect';
+    const userName = yandexUser.real_name || yandexUser.display_name || yandexUser.login;
+    const userEmail = yandexUser.default_email;
+    const avatarUrl = yandexUser.default_avatar_id
+      ? `https://avatars.yandex.net/get-yapic/${yandexUser.default_avatar_id}/islands-200`
+      : null;
 
-    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
-      const { supabase } = await import('@/lib/config.mjs');
-
-      if (supabase) {
-        const { data: existing } = await supabase
-          .from('users')
-          .select('*')
-          .eq('yandex_uid', yandexUser.id)
-          .single();
+    if (isDbConnected()) {
+      try {
+        const existing = await findUserByYandexUid(yandexUser.id);
 
         if (existing) {
-          await supabase
-            .from('users')
-            .update({
-              last_login: new Date().toISOString(),
-              tracker_login: trackerLogin || existing.tracker_login,
-              name: yandexUser.real_name || yandexUser.display_name || existing.name,
-              avatar_url: yandexUser.default_avatar_id
-                ? `https://avatars.yandex.net/get-yapic/${yandexUser.default_avatar_id}/islands-200`
-                : existing.avatar_url,
-            })
-            .eq('yandex_uid', yandexUser.id);
-
+          await updateUserLogin(yandexUser.id, {
+            tracker_login: trackerLogin,
+            name: userName,
+            avatar_url: avatarUrl,
+          });
           userId = existing.id;
           userRole = existing.role;
         } else {
-          const { data: newUser } = await supabase
-            .from('users')
-            .insert({
-              yandex_uid: yandexUser.id,
-              tracker_login: trackerLogin,
-              name: yandexUser.real_name || yandexUser.display_name || 'Новый сотрудник',
-              email: yandexUser.default_email,
-              avatar_url: yandexUser.default_avatar_id
-                ? `https://avatars.yandex.net/get-yapic/${yandexUser.default_avatar_id}/islands-200`
-                : null,
-              role: 'architect',
-              last_login: new Date().toISOString(),
-            })
-            .select()
-            .single();
+          // Определить роль: из маппинга по email или architect по умолчанию
+          const autoRole = EMAIL_ROLE_MAP[userEmail] || 'architect';
 
-          if (newUser) {
-            userId = newUser.id;
-            userRole = newUser.role;
+          const newUser = await createUser({
+            yandex_uid: yandexUser.id,
+            tracker_login: trackerLogin,
+            name: userName,
+            email: userEmail,
+            avatar_url: avatarUrl,
+            role: autoRole,
+          });
 
-            // Создать шаги онбординга
-            const steps = Array.from({ length: 10 }, (_, i) => ({
-              user_id: newUser.id,
-              step_id: i + 1,
-              completed: false,
-            }));
-            await supabase.from('onboarding').insert(steps);
-          }
+          userId = newUser.id;
+          userRole = newUser.role;
+
+          // Создать шаги онбординга
+          await createOnboardingSteps(newUser.id);
         }
+      } catch (dbErr) {
+        console.error('DB error (non-critical, using session fallback):', dbErr.message);
       }
     }
 
@@ -132,7 +106,7 @@ export async function GET(request) {
     await createSession({
       id: userId,
       yandex_uid: yandexUser.id,
-      name: yandexUser.real_name || yandexUser.display_name || yandexUser.login,
+      name: userName,
       role: userRole,
       tracker_token: oauthToken,
     });

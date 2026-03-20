@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/session.mjs';
-import { supabase, ROLES } from '@/lib/config.mjs';
+import { isDbConnected, findUserById } from '@/lib/db.mjs';
+import { ROLES } from '@/lib/config.mjs';
 
 export async function GET() {
   const session = await getSession();
@@ -8,8 +9,8 @@ export async function GET() {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 
-  // Если Supabase не настроен — вернуть данные из сессии
-  if (!process.env.SUPABASE_URL) {
+  // Если БД не подключена — вернуть данные из сессии
+  if (!isDbConnected()) {
     const roleConfig = ROLES[session.role] || ROLES.architect;
     return NextResponse.json({
       id: session.uid,
@@ -22,27 +23,46 @@ export async function GET() {
     });
   }
 
-  const { data: user } = await supabase
-    .from('users')
-    .select('*')
-    .eq('id', session.uid)
-    .single();
+  try {
+    const user = await findUserById(session.uid);
 
-  if (!user) {
-    return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    if (!user) {
+      const roleConfig = ROLES[session.role] || ROLES.architect;
+      return NextResponse.json({
+        id: session.uid,
+        name: session.name,
+        role: session.role,
+        roleLabel: roleConfig.label,
+        roleColor: roleConfig.color,
+        queues: roleConfig.queues,
+        source: 'session',
+      });
+    }
+
+    const roleConfig = ROLES[user.role] || ROLES.architect;
+
+    return NextResponse.json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      roleLabel: roleConfig.label,
+      roleColor: roleConfig.color,
+      queues: roleConfig.queues,
+      avatar_url: user.avatar_url,
+      office: user.office,
+    });
+  } catch (err) {
+    console.error('DB error in /me:', err.message);
+    const roleConfig = ROLES[session.role] || ROLES.architect;
+    return NextResponse.json({
+      id: session.uid,
+      name: session.name,
+      role: session.role,
+      roleLabel: roleConfig.label,
+      roleColor: roleConfig.color,
+      queues: roleConfig.queues,
+      source: 'session-fallback',
+    });
   }
-
-  const roleConfig = ROLES[user.role] || ROLES.architect;
-
-  return NextResponse.json({
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    roleLabel: roleConfig.label,
-    roleColor: roleConfig.color,
-    queues: roleConfig.queues,
-    avatar_url: user.avatar_url,
-    office: user.office,
-  });
 }
