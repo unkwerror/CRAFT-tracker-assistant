@@ -9,7 +9,7 @@ const LINKS = [
 
 export default function QuickLinks({ queues = [] }) {
   return (
-    <div className="bg-craft-surface border border-craft-border rounded-xl overflow-hidden">
+    <div className="bg-craft-surface border border-craft-border rounded-xl overflow-hidden transition-colors duration-200 hover:border-craft-border2">
       <div className="px-5 py-3.5 border-b border-craft-border">
         <h2 className="text-[13px] font-display font-medium tracking-tight">Быстрые ссылки</h2>
       </div>

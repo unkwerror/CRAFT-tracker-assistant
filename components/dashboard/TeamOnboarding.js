@@ -27,7 +27,7 @@ export default function TeamOnboarding() {
   const totalCompleted = team.filter(m => m.onboarding_pct === 100).length;
 
   return (
-    <div className="bg-craft-surface border border-craft-border rounded-xl overflow-hidden">
+    <div className="bg-craft-surface border border-craft-border rounded-xl overflow-hidden transition-colors duration-200 hover:border-craft-border2">
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-craft-border">
         <h2 className="text-[13px] font-display font-medium tracking-tight">Онбординг команды</h2>
         {team.length > 0 && (
