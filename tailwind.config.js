@@ -4,21 +4,28 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Onest', 'system-ui', 'sans-serif'],
+        display: ['Unbounded', 'system-ui', 'sans-serif'],
+        sans: ['Golos Text', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
       },
       colors: {
         craft: {
-          bg: '#0B0F15',
-          surface: '#161D27',
-          surface2: '#1B2432',
-          border: '#2A3545',
+          bg: '#0e0e0e',
+          surface: '#161616',
+          surface2: '#1c1c1c',
+          border: '#262626',
+          border2: '#333333',
           accent: '#5BA4F5',
           green: '#42C774',
           purple: '#C9A0FF',
           orange: '#FFB155',
           red: '#FF7B72',
+          cyan: '#6DD8E0',
+          muted: '#7A8899',
         },
+      },
+      fontSize: {
+        '2xs': ['0.625rem', { lineHeight: '0.875rem' }],
       },
     },
   },
