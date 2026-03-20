@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/session.mjs';
+import { hasPermission } from '@/lib/api-helpers.mjs';
 import { TrackerClient } from '@/lib/tracker.mjs';
 
-// POST — create issue
+const QUEUE_WRITE_PERMISSION = {
+  CRM: 'crm:write', PROJ: 'proj:write', DOCS: 'docs:write', HR: 'hr:write',
+};
+
 export async function POST(request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
@@ -12,6 +16,12 @@ export async function POST(request) {
 
   if (!queue || !summary) {
     return NextResponse.json({ error: 'queue and summary are required' }, { status: 400 });
+  }
+
+  const requiredPerm = QUEUE_WRITE_PERMISSION[queue.toUpperCase()];
+  if (requiredPerm) {
+    const hasPerm = await hasPermission(session, requiredPerm);
+    if (!hasPerm) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const tracker = new TrackerClient(session.tracker_token, process.env.TRACKER_ORG_ID);

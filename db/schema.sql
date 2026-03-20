@@ -282,6 +282,58 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_r
 CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at DESC);
 
 
+-- ─────────────────────────────────────
+-- 11. CRM СНАПШОТЫ (исторические срезы воронки)
+-- ─────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS crm_snapshots (
+  id              SERIAL PRIMARY KEY,
+  snapshot_date   DATE NOT NULL,
+  stage_key       TEXT NOT NULL,
+  lead_count      INT DEFAULT 0,
+  total_budget    BIGINT DEFAULT 0,
+  avg_cycle_days  FLOAT,
+  created_at      TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(snapshot_date, stage_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_crm_snapshots_date ON crm_snapshots(snapshot_date);
+
+
+-- ─────────────────────────────────────
+-- 12. CRM СОБЫТИЯ (локальный Activity Log)
+-- ─────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS crm_events (
+  id          SERIAL PRIMARY KEY,
+  issue_key   TEXT NOT NULL,
+  event_type  TEXT NOT NULL,
+  user_id     INT REFERENCES users(id) ON DELETE SET NULL,
+  details     JSONB DEFAULT '{}',
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_crm_events_issue ON crm_events(issue_key);
+CREATE INDEX IF NOT EXISTS idx_crm_events_date ON crm_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_crm_events_type ON crm_events(event_type);
+
+
+-- ─────────────────────────────────────
+-- 13. ML МОДЕЛИ (кэш обученных моделей)
+-- ─────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS ml_models (
+  id          SERIAL PRIMARY KEY,
+  model_type  TEXT NOT NULL,
+  model_data  JSONB NOT NULL,
+  metrics     JSONB DEFAULT '{}',
+  trained_on  INT DEFAULT 0,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ml_models_type ON ml_models(model_type, created_at DESC);
+
+
 -- ═══════════════════════════════════════════════════════
 -- СВЯЗИ
 -- ═══════════════════════════════════════════════════════
@@ -290,10 +342,13 @@ CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at
 --             ├──── onboarding         (1:N)
 --             ├──── dashboard_layouts  (1:1)
 --             ├──── audit_log          (1:N)
---             └──── notifications     (1:N)
+--             ├──── notifications     (1:N)
+--             └──── crm_events        (1:N)
 --
 --  roles      ←──── users.role
 --  widgets    (standalone registry, access via allowed_roles jsonb)
 --  queues     ←──── queue_fields.queue_key
+--  crm_snapshots   (standalone, daily snapshots)
+--  ml_models       (standalone, trained model cache)
 --
 -- ═══════════════════════════════════════════════════════

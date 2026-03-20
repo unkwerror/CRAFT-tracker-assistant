@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/session.mjs';
+import { hasPermission } from '@/lib/api-helpers.mjs';
 import { isDbConnected, getOnboardingProgress, upsertOnboardingStep, query } from '@/lib/db.mjs';
 import { ONBOARDING_STEPS } from '@/lib/config.mjs';
 
@@ -18,6 +19,8 @@ export async function GET(request) {
   const { searchParams } = new URL(request.url);
 
   if (searchParams.get('all') === 'true') {
+    const isAdmin = await hasPermission(session, 'admin:panel');
+    if (!isAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     try {
       const totalSteps = ONBOARDING_STEPS.length;
       const { rows } = await query(

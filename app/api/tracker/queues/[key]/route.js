@@ -1,12 +1,23 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/session.mjs';
+import { hasPermission } from '@/lib/api-helpers.mjs';
 import { TrackerClient, normalizeIssue } from '@/lib/tracker.mjs';
+
+const QUEUE_PERMISSION_MAP = {
+  CRM: 'crm:read', PROJ: 'proj:read', DOCS: 'docs:read', HR: 'hr:read',
+};
 
 export async function GET(request, { params }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const { key } = params;
+  const requiredPerm = QUEUE_PERMISSION_MAP[key.toUpperCase()];
+  if (requiredPerm) {
+    const hasPerm = await hasPermission(session, requiredPerm);
+    if (!hasPerm) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const { searchParams } = new URL(request.url);
   const status = searchParams.get('status');
   const assignee = searchParams.get('assignee');
