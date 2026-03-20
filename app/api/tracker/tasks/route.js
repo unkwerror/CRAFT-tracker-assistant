@@ -2,6 +2,7 @@
 
 import { requireAuth, jsonOk, jsonError } from '@/lib/api-helpers.mjs';
 import { TrackerClient, normalizeIssue } from '@/lib/tracker.mjs';
+import { getLocalIssues, getLocalIssuesByQueue, dbRowToNormalizedIssue } from '@/lib/db.mjs';
 
 export async function GET(request) {
   const auth = await requireAuth();
@@ -16,36 +17,85 @@ export async function GET(request) {
   const assigneeMe = searchParams.get('assigneeMe') !== 'false'; // для CRM: false = все лиды
 
   const tracker = new TrackerClient(session.tracker_token, process.env.TRACKER_ORG_ID);
-  if (!tracker.enabled) return jsonError('Tracker not configured', 503);
+  const sessionAssigneeId = String(session?.tracker_login ?? session?.uid ?? '');
 
   try {
-    let tasks;
+    let normalized = [];
+    let source = 'tracker';
 
     switch (type) {
       case 'overdue':
-        tasks = await tracker.getOverdueTasks();
+        if (!tracker.enabled) return jsonError('Tracker not configured', 503);
+        normalized = (await tracker.getOverdueTasks() || []).map(normalizeIssue);
         break;
       case 'stale':
-        tasks = await tracker.getStaleTasks(14);
+        if (!tracker.enabled) return jsonError('Tracker not configured', 503);
+        normalized = (await tracker.getStaleTasks(14) || []).map(normalizeIssue);
         break;
       case 'no_deadline':
-        tasks = await tracker.getTasksWithoutDeadline();
+        if (!tracker.enabled) return jsonError('Tracker not configured', 503);
+        normalized = (await tracker.getTasksWithoutDeadline() || []).map(normalizeIssue);
         break;
       default:
         if (queue) {
-          // CRM: все лиды (assigneeMe=false), PROJ: только мои
-          tasks = await tracker.getQueueTasks(queue, {
+          let local = [];
+          try {
+            local = (await getLocalIssuesByQueue(queue)).map(dbRowToNormalizedIssue);
+          } catch (e) {
+            console.error('Local queue tasks read failed:', e.message);
+          }
+          if (status) {
+            local = local.filter((issue) => issue.statusKey === status || issue.status === status);
+          }
+          if (queue !== 'CRM' && assigneeMe && sessionAssigneeId) {
+            local = local.filter((issue) => String(issue.assigneeId || '') === sessionAssigneeId);
+          }
+
+          if (local.length > 0) {
+            normalized = local;
+            source = 'local';
+            break;
+          }
+
+          if (!tracker.enabled) return jsonError('Tracker not configured', 503);
+          const tasks = await tracker.getQueueTasks(queue, {
             assigneeMe: queue === 'CRM' ? false : assigneeMe,
             status: status || null,
           });
+          normalized = (tasks || []).map(normalizeIssue);
         } else {
-          tasks = await tracker.getMyTasks(status);
+          let local = [];
+          if (sessionAssigneeId) {
+            try {
+              local = (await getLocalIssues({
+                assigneeId: sessionAssigneeId,
+                statusKey: status || undefined,
+                limit: 500,
+                offset: 0,
+              })).map(dbRowToNormalizedIssue);
+            } catch (e) {
+              console.error('Local my tasks read failed:', e.message);
+            }
+          }
+
+          if (status) {
+            local = local.filter((issue) => issue.statusKey === status || issue.status === status);
+          }
+
+          if (local.length > 0) {
+            normalized = local;
+            source = 'local';
+            break;
+          }
+
+          if (!tracker.enabled) return jsonError('Tracker not configured', 503);
+          const tasks = await tracker.getMyTasks(status);
+          normalized = (tasks || []).map(normalizeIssue);
         }
     }
 
     const now = new Date();
-    const normalized = (tasks || []).map(raw => {
-      const t = normalizeIssue(raw);
+    const tasksWithMetrics = normalized.map((t) => {
       if (type === 'overdue' && t.deadline) {
         t.days = Math.max(0, Math.round((now - new Date(t.deadline)) / 86400000));
       } else if (type === 'stale' && t.updatedAt) {
@@ -55,7 +105,7 @@ export async function GET(request) {
       }
       return t;
     });
-    return jsonOk({ tasks: normalized, count: normalized.length });
+    return jsonOk({ tasks: tasksWithMetrics, count: tasksWithMetrics.length, source });
 
   } catch (error) {
     console.error('Tracker tasks error:', error.message);
