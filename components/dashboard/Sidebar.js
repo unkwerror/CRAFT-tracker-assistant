@@ -6,6 +6,9 @@ import { motion } from 'framer-motion';
 
 const NAV = [
   { id: 'dashboard', label: 'Дашборд', href: '/dashboard', icon: GridIcon },
+  { id: 'tasks', label: 'Задачи', href: '/tasks', icon: TaskIcon },
+  { id: 'crm', label: 'CRM', href: '/crm', icon: CrmIcon },
+  { id: 'analytics', label: 'Аналитика', href: '/analytics', icon: ChartIcon },
   { id: 'guide', label: 'Гайд', href: '/', icon: BookIcon },
 ];
 const ADMIN_NAV = { id: 'admin', label: 'Управление', href: '/admin', icon: ShieldIcon };
@@ -124,6 +127,15 @@ function BookIcon({ className }) {
 }
 function ShieldIcon({ className }) {
   return (<svg className={className} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 1.5L2.5 4v4c0 3.5 2.5 5.5 5.5 6.5 3-1 5.5-3 5.5-6.5V4L8 1.5z"/><path d="M6 8l1.5 1.5L10 6.5"/></svg>);
+}
+function TaskIcon({ className }) {
+  return (<svg className={className} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 4h10M3 8h7M3 12h5"/><circle cx="13" cy="11" r="2.5"/><path d="M12 11l.8.8L15 9.5"/></svg>);
+}
+function CrmIcon({ className }) {
+  return (<svg className={className} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="3" width="12" height="3" rx="1"/><rect x="4" y="7" width="8" height="3" rx="1"/><rect x="6" y="11" width="4" height="2" rx="1"/></svg>);
+}
+function ChartIcon({ className }) {
+  return (<svg className={className} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 13V8M7 13V5M11 13V3"/><path d="M2 14h12"/></svg>);
 }
 function ChevronIcon({ className }) {
   return (<svg className={className} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 4l-4 4 4 4"/></svg>);

@@ -6,7 +6,6 @@ import DashboardShell from '@/components/dashboard/DashboardShell';
 export default async function DashboardPage() {
   const session = await getSession();
   if (!session) redirect('/login');
-
   const resolved = await resolveUserDisplay(session);
 
   const user = {

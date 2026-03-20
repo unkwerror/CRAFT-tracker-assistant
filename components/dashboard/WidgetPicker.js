@@ -41,7 +41,7 @@ export default function WidgetPicker({ available, active, onChange, onReset, onC
                   <div className="flex items-center gap-2 mb-1">
                     <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all duration-200
                       ${on ? 'bg-craft-accent/20 border-craft-accent/40' : 'border-white/10'}`}>
-                      {on && <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="var(--craft-accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      {on && <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="rgb(var(--craft-accent))" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                     </div>
                     <span className={`text-[12px] font-medium transition-colors duration-200 ${on ? 'text-white/80' : 'text-white/40'}`}>{w.title}</span>
                   </div>

@@ -61,7 +61,7 @@ export default function OnboardingWidget({ userId, useDb = false }) {
         <div className="flex items-center gap-3">
           <div className="flex-1 h-1.5 bg-white/[0.04] rounded-full overflow-hidden">
             <div className="h-full rounded-full transition-all duration-700 ease-out"
-              style={{ width: `${pct}%`, background: allDone ? 'var(--craft-green)' : 'linear-gradient(90deg, var(--craft-accent), var(--craft-purple))' }} />
+              style={{ width: `${pct}%`, background: allDone ? 'rgb(var(--craft-green))' : 'linear-gradient(90deg, rgb(var(--craft-accent)), rgb(var(--craft-purple)))' }} />
           </div>
           <span className={`text-2xs font-mono transition-colors duration-500 ${allDone ? 'text-craft-green' : 'text-white/25'}`}>{pct}%</span>
         </div>
@@ -104,7 +104,7 @@ function StepRow({ step, done, justToggled, onToggle }) {
         ${done ? 'bg-craft-green/15 border-craft-green/30' : 'border-white/10 group-hover:border-white/20'}`}>
         {done && (
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className={justToggled ? 'animate-checkmark' : ''}>
-            <path d="M2 5l2.5 2.5L8 3" stroke="var(--craft-green)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M2 5l2.5 2.5L8 3" stroke="rgb(var(--craft-green))" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         )}
       </div>

@@ -1,12 +1,12 @@
 'use client';
 
 const LINKS = [
-  { label: 'Мои задачи', href: 'https://tracker.yandex.ru/issues/?filter=assignee(me())&status=open,inProgress', desc: 'Все задачи, назначенные на вас', color: 'var(--craft-accent)' },
-  { label: 'CRM — Лиды', href: 'https://tracker.yandex.ru/CRM', desc: 'Воронка лидов и сделок', color: 'var(--craft-cyan)' },
-  { label: 'Канбан-доска', href: 'https://tracker.yandex.ru/boards', desc: 'Доска вашей очереди', color: 'var(--craft-green)' },
-  { label: 'API: доски', href: '/api/tracker/boards', desc: 'JSON локального endpoint досок', color: 'var(--craft-muted)' },
-  { label: 'Создать задачу', href: 'https://tracker.yandex.ru/createTicket', desc: 'Новая задача в Трекере', color: 'var(--craft-purple)' },
-  { label: 'Дашборды', href: 'https://tracker.yandex.ru/dashboards', desc: 'Аналитика и отчёты', color: 'var(--craft-orange)' },
+  { label: 'Мои задачи', href: 'https://tracker.yandex.ru/issues/?filter=assignee(me())&status=open,inProgress', desc: 'Все задачи, назначенные на вас', color: 'rgb(var(--craft-accent))' },
+  { label: 'CRM — Лиды', href: 'https://tracker.yandex.ru/CRM', desc: 'Воронка лидов и сделок', color: 'rgb(var(--craft-cyan))' },
+  { label: 'Канбан-доска', href: 'https://tracker.yandex.ru/boards', desc: 'Доска вашей очереди', color: 'rgb(var(--craft-green))' },
+  { label: 'API: доски', href: '/api/tracker/boards', desc: 'JSON локального endpoint досок', color: 'rgb(var(--craft-muted))' },
+  { label: 'Создать задачу', href: 'https://tracker.yandex.ru/createTicket', desc: 'Новая задача в Трекере', color: 'rgb(var(--craft-purple))' },
+  { label: 'Дашборды', href: 'https://tracker.yandex.ru/dashboards', desc: 'Аналитика и отчёты', color: 'rgb(var(--craft-orange))' },
 ];
 
 export default function QuickLinks({ queues = [] }) {

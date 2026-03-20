@@ -6,19 +6,11 @@ import { SortableContext, rectSortingStrategy, arrayMove, sortableKeyboardCoordi
 import { CSS } from '@dnd-kit/utilities';
 import { ROLE_DASHBOARD } from '@/lib/dashboard-config.mjs';
 import QueueTasks from './QueueTasks';
-import CrmKanban from './CrmKanban';
 import StatsBar from './StatsBar';
 import FunnelChart from './FunnelChart';
 import AuditWidget from './AuditWidget';
 import OnboardingWidget from './OnboardingWidget';
-import QuickLinks from './QuickLinks';
-import PortfolioSummary from './PortfolioSummary';
-import TeamOnboarding from './TeamOnboarding';
-import SystemStatus from './SystemStatus';
 import WidgetPicker from './WidgetPicker';
-import CrmAnalytics from './CrmAnalytics';
-import CrmTimeline from './CrmTimeline';
-import LeadAging from './LeadAging';
 import BrandIllustration from './BrandIllustration';
 
 /**
@@ -26,7 +18,6 @@ import BrandIllustration from './BrandIllustration';
  * Keys must match the DB `widgets.key` column.
  */
 const WIDGET_REGISTRY = {
-  // ── DB keys (canonical) ──
   stats_bar: {
     render: (p) => <StatsBar trackerConnected={p.trackerConnected} />,
     title: 'Сводка', desc: 'Ключевые метрики', size: 'full',
@@ -35,59 +26,18 @@ const WIDGET_REGISTRY = {
     render: (p) => <QueueTasks title="Мои задачи" trackerConnected={p.trackerConnected} emptyMessage="Нет активных задач" />,
     title: 'Мои задачи', desc: 'Задачи из Трекера', size: 'half',
   },
-  tasks_crm: {
-    render: (p) => <QueueTasks title="CRM — Лиды" queueKey="CRM" trackerConnected={p.trackerConnected} emptyMessage="Нет лидов" />,
-    title: 'CRM — лиды', desc: 'Задачи из CRM-очереди', size: 'half',
-  },
-  kanban_crm: {
-    render: (p) => <CrmKanban trackerConnected={p.trackerConnected} />,
-    title: 'CRM — Воронка', desc: 'Канбан лидов из CRM', size: 'full',
-  },
-  tasks_proj: {
-    render: (p) => <QueueTasks title="Задачи проектов" queueKey="PROJ" trackerConnected={p.trackerConnected} emptyMessage="Нет задач в проектах" />,
-    title: 'Задачи проектов', desc: 'Все задачи ваших проектов', size: 'half',
-  },
   funnel_crm: {
     render: (p) => <FunnelChart trackerConnected={p.trackerConnected} />,
     title: 'Воронка CRM', desc: 'Визуализация воронки продаж', size: 'half',
-  },
-  quick_links: {
-    render: (p) => <QuickLinks queues={p.queues} />,
-    title: 'Быстрые ссылки', desc: 'Ссылки на Трекер и доски', size: 'half',
-  },
-  onboarding: {
-    render: (p) => <OnboardingWidget userId={p.userId} useDb={p.dbConnected} />,
-    title: 'Онбординг', desc: 'Чеклист для новых сотрудников', size: 'half',
   },
   audit: {
     render: (p) => <AuditWidget {...p} />,
     title: 'Аудит качества', desc: 'Без дедлайна, зависшие, просрочки', size: 'full',
   },
-  portfolio_summary: {
-    render: (p) => <PortfolioSummary {...p} />,
-    title: 'Портфель проектов', desc: 'Обзор всех проектов бюро', size: 'full',
+  onboarding: {
+    render: (p) => <OnboardingWidget userId={p.userId} useDb={p.dbConnected} />,
+    title: 'Онбординг', desc: 'Чеклист для новых сотрудников', size: 'half',
   },
-  team_onboarding: {
-    render: () => <TeamOnboarding />,
-    title: 'Онбординг команды', desc: 'Прогресс онбординга всех', size: 'full',
-  },
-  system_status: {
-    render: (p) => <SystemStatus {...p} />,
-    title: 'Статус системы', desc: 'Подключения к Трекеру и БД', size: 'half',
-  },
-  crm_analytics: {
-    render: (p) => <CrmAnalytics trackerConnected={p.trackerConnected} />,
-    title: 'CRM Аналитика', desc: 'Скоринг, прогноз, velocity, аномалии', size: 'full',
-  },
-  crm_timeline: {
-    render: (p) => <CrmTimeline trackerConnected={p.trackerConnected} />,
-    title: 'CRM — Лента', desc: 'Последние события CRM', size: 'half',
-  },
-  lead_aging: {
-    render: (p) => <LeadAging trackerConnected={p.trackerConnected} />,
-    title: 'Застрявшие лиды', desc: 'Лиды без обновлений', size: 'half',
-  },
-
 };
 
 const WIDGET_FRAME_MODES = ['strict', 'neo', 'y2k'];
