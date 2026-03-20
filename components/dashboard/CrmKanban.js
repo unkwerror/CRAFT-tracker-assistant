@@ -22,6 +22,21 @@ const STATUS_MAP = {
 
 const POLL_INTERVAL = 30_000;
 
+async function readTrackerResponse(r) {
+  let data = {};
+  try {
+    data = await r.json();
+  } catch {
+    /* non-JSON body */
+  }
+  if (!r.ok) {
+    throw new Error(
+      data.error || (r.status === 503 ? 'Трекер не подключён' : `Ошибка ${r.status}`)
+    );
+  }
+  return data;
+}
+
 function resolveColumn(task) {
   if (task.statusKey && COLUMNS.find(c => c.key === task.statusKey)) return task.statusKey;
   const mapped = STATUS_MAP[task.status];
@@ -49,9 +64,8 @@ export default function CrmKanban({ trackerConnected = false }) {
     if (!trackerConnected) { setLoading(false); return; }
     if (!silent) { setLoading(true); setError(null); }
     fetch('/api/tracker/queues/CRM')
-      .then(r => r.json())
+      .then(readTrackerResponse)
       .then(data => {
-        if (data.error) throw new Error(data.error);
         setTasks(data.tasks || []);
       })
       .catch(err => { if (!silent) setError(err.message); })
@@ -70,7 +84,7 @@ export default function CrmKanban({ trackerConnected = false }) {
     if (transitionCache.current[issueKey]) return transitionCache.current[issueKey];
     try {
       const r = await fetch(`/api/tracker/issues/${issueKey}/transitions`);
-      const data = await r.json();
+      const data = await readTrackerResponse(r);
       const t = data.transitions || [];
       transitionCache.current[issueKey] = t;
       return t;
@@ -83,9 +97,7 @@ export default function CrmKanban({ trackerConnected = false }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ transitionId }),
     });
-    const data = await r.json();
-    if (data.error) throw new Error(data.error);
-    return data;
+    return readTrackerResponse(r);
   }, []);
 
   // ─── Drag & Drop ───
@@ -369,8 +381,8 @@ function LeadCard({ task, isDragging, onClick, onDragStart, onDragEnd }) {
       onDragEnd={onDragEnd}
       onClick={onClick}
       className={`bg-craft-bg/80 rounded-lg p-3 border border-white/[0.06] cursor-pointer select-none
-        hover:border-white/10 hover:-translate-y-0.5 active:scale-[0.985]
-        transition-all duration-200
+        hover:border-white/20 hover:shadow-[0_6px_22px_rgba(0,0,0,0.38)] hover:-translate-y-0.5 active:scale-[0.985]
+        transition-[border-color,box-shadow,transform] duration-200 ease-out
         ${isDragging ? 'opacity-40 scale-95' : ''}
         ${onDragStart ? 'cursor-grab active:cursor-grabbing' : ''}`}
     >
@@ -409,7 +421,7 @@ function LeadDetailModal({ task, onClose, onTransition, onUpdated, getTransition
 
   useEffect(() => {
     fetch(`/api/tracker/issues/${task.key}`)
-      .then(r => r.json())
+      .then(readTrackerResponse)
       .then(d => {
         const issue = d.issue || null;
         setDetail(issue);
@@ -432,8 +444,7 @@ function LeadDetailModal({ task, onClose, onTransition, onUpdated, getTransition
     setCommentsLoading(true);
     try {
       const r = await fetch(`/api/tracker/issues/${task.key}/comments`);
-      const data = await r.json();
-      if (data.error) throw new Error(data.error);
+      const data = await readTrackerResponse(r);
       setComments(Array.isArray(data.comments) ? data.comments : []);
     } catch {
       setComments([]);
@@ -446,8 +457,7 @@ function LeadDetailModal({ task, onClose, onTransition, onUpdated, getTransition
     setHistoryLoading(true);
     try {
       const r = await fetch(`/api/tracker/issues/${task.key}/changelog?field=status`);
-      const data = await r.json();
-      if (data.error) throw new Error(data.error);
+      const data = await readTrackerResponse(r);
       setHistory(Array.isArray(data.changelog) ? data.changelog : []);
     } catch {
       setHistory([]);
@@ -460,8 +470,7 @@ function LeadDetailModal({ task, onClose, onTransition, onUpdated, getTransition
     setAttachmentsLoading(true);
     try {
       const r = await fetch(`/api/tracker/issues/${task.key}/attachments`);
-      const data = await r.json();
-      if (data.error) throw new Error(data.error);
+      const data = await readTrackerResponse(r);
       setAttachments(Array.isArray(data.attachments) ? data.attachments : []);
     } catch {
       setAttachments([]);
@@ -501,8 +510,7 @@ function LeadDetailModal({ task, onClose, onTransition, onUpdated, getTransition
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const data = await r.json();
-      if (data.error) throw new Error(data.error);
+      const data = await readTrackerResponse(r);
       setDetail(data.issue);
       setEditing(false);
       onUpdated?.();
@@ -522,8 +530,7 @@ function LeadDetailModal({ task, onClose, onTransition, onUpdated, getTransition
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: commentText.trim() }),
       });
-      const data = await r.json();
-      if (data.error) throw new Error(data.error);
+      const data = await readTrackerResponse(r);
       setCommentText('');
       setComments(prev => {
         const next = Array.isArray(prev) ? prev : [];
@@ -549,8 +556,7 @@ function LeadDetailModal({ task, onClose, onTransition, onUpdated, getTransition
         method: 'POST',
         body: formData,
       });
-      const data = await r.json();
-      if (data.error) throw new Error(data.error);
+      await readTrackerResponse(r);
       await loadAttachments();
       onUpdated?.();
     } catch (e) {
@@ -567,12 +573,21 @@ function LeadDetailModal({ task, onClose, onTransition, onUpdated, getTransition
     return (
       <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
         {history.map((h, i) => {
-          const from = h.from?.display || h.from?.key || h.from || '—';
-          const to = h.to?.display || h.to?.key || h.to || '—';
+          const from = h.fromDisplay || h.from?.display || h.from?.key || h.from || '—';
+          const to = h.toDisplay || h.to?.display || h.to?.key || h.to || '—';
           const ts = h.updatedAt || h.createdAt;
-          const who = h.updatedBy?.display || h.createdBy?.display || h.author?.display || 'Система';
+          const who =
+            typeof h.updatedBy === 'string' && h.updatedBy.trim() !== ''
+              ? h.updatedBy
+              : h.updatedBy?.display || h.createdBy?.display || h.author?.display || 'Система';
+          const fieldLine = h.field != null && h.fieldDisplay
+            ? <div className="text-2xs text-white/35 mb-0.5">{h.fieldDisplay}</div>
+            : h.field != null && h.field
+              ? <div className="text-2xs text-white/35 mb-0.5">{h.field}</div>
+              : null;
           return (
             <div key={h.id || `${ts || 'ts'}-${i}`} className="bg-white/[0.03] border border-white/[0.05] rounded-lg p-2.5">
+              {fieldLine}
               <div className="text-2xs text-white/65">{from} → {to}</div>
               <div className="text-2xs text-white/25 mt-1">
                 {ts ? new Date(ts).toLocaleString('ru-RU') : '—'} • {who}
@@ -788,12 +803,17 @@ function LeadDetailModal({ task, onClose, onTransition, onUpdated, getTransition
                   <div key={a.id || `${a.url || 'f'}-${i}`} className="bg-white/[0.03] border border-white/[0.05] rounded-lg p-2.5">
                     <div className="flex items-center justify-between gap-2">
                       <a
-                        href={a.url || a.content || '#'}
+                        href={a.downloadUrl || a.url || a.content || '#'}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-2xs text-craft-accent hover:underline truncate"
+                        className="text-2xs text-craft-accent hover:underline truncate flex items-center gap-1.5 min-w-0"
                       >
-                        {a.name || a.filename || `Файл ${i + 1}`}
+                        {a.downloadUrl && (
+                          <svg className="w-3.5 h-3.5 shrink-0 text-craft-accent/80" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
+                            <path d="M8 2v8M8 10l3-3M8 10L5 7M3 12h10" />
+                          </svg>
+                        )}
+                        <span className="truncate">{a.name || a.filename || `Файл ${i + 1}`}</span>
                       </a>
                       <span className="text-2xs text-white/20 shrink-0">{formatBytes(a.size || a.bytes || 0)}</span>
                     </div>
@@ -841,8 +861,7 @@ function NewLeadForm({ onCreated, onCancel }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ queue: 'CRM', summary: summary.trim(), description: description.trim() || undefined }),
       });
-      const data = await r.json();
-      if (data.error) throw new Error(data.error);
+      const data = await readTrackerResponse(r);
       onCreated(data.issue);
     } catch (e) {
       setErr(e.message);

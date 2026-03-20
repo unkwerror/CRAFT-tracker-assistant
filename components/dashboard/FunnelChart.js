@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Canvas, useFrame } from '@react-three/fiber';
 import WidgetDebugBadge from './WidgetDebugBadge';
@@ -22,42 +22,67 @@ const STATUS_MAP = {
   'Проект открыт': 'projectOpened',
 };
 
+async function readTrackerJson(r) {
+  let data = {};
+  try {
+    data = await r.json();
+  } catch {
+    /* non-JSON */
+  }
+  if (!r.ok) {
+    throw new Error(
+      data.error || (r.status === 503 ? 'Трекер не подключён' : `Ошибка ${r.status}`)
+    );
+  }
+  return data;
+}
+
 export default function FunnelChart({ trackerConnected = false }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showS2S, setShowS2S] = useState(false);
 
-  useEffect(() => {
-    if (!trackerConnected) { setLoading(false); return; }
-
+  const loadFunnel = useCallback(() => {
+    if (!trackerConnected) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
     fetch('/api/tracker/queues/CRM')
-      .then(r => r.json())
-      .then(d => {
+      .then(readTrackerJson)
+      .then((d) => {
         const tasks = d.tasks || [];
         const byStage = {};
         let total = 0;
         for (const t of tasks) {
           const sk = STATUS_MAP[t.status] || t.statusKey || 'unknown';
-          if (FUNNEL_STAGES.find(s => s.key === sk)) {
+          if (FUNNEL_STAGES.find((s) => s.key === sk)) {
             byStage[sk] = (byStage[sk] || 0) + 1;
             total++;
           }
         }
-        const postponed = tasks.filter(t => (STATUS_MAP[t.status] || t.statusKey) === 'postponed').length;
-        const rejected = tasks.filter(t => (STATUS_MAP[t.status] || t.statusKey) === 'rejected').length;
+        const postponed = tasks.filter((t) => (STATUS_MAP[t.status] || t.statusKey) === 'postponed').length;
+        const rejected = tasks.filter((t) => (STATUS_MAP[t.status] || t.statusKey) === 'rejected').length;
         setData({ byStage, total, postponed, rejected, allCount: tasks.length });
       })
-      .catch(() => setData(null))
+      .catch((e) => {
+        setError(e.message);
+        setData(null);
+      })
       .finally(() => setLoading(false));
   }, [trackerConnected]);
 
-  if (!trackerConnected || (!loading && !data)) {
+  useEffect(() => {
+    loadFunnel();
+  }, [loadFunnel]);
+
+  if (!trackerConnected) {
     return (
       <div className="bg-craft-surface border border-craft-border rounded-2xl p-5">
         <h2 className="text-[13px] font-display font-medium tracking-tight mb-4">Воронка CRM</h2>
-        <div className="py-8 text-center text-[12px] text-white/20">
-          {!trackerConnected ? 'Подключите Трекер' : 'Нет данных'}
-        </div>
+        <div className="py-8 text-center text-[12px] text-white/20">Подключите Трекер</div>
       </div>
     );
   }
@@ -73,6 +98,34 @@ export default function FunnelChart({ trackerConnected = false }) {
             transition={{ repeat: Infinity, duration: 0.8, ease: 'linear' }}
           />
         </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-craft-surface border border-craft-border rounded-2xl p-5">
+        <h2 className="text-[13px] font-display font-medium tracking-tight mb-4">Воронка CRM</h2>
+        <div className="py-8 text-center">
+          <div className="text-craft-red/60 mb-2">Ошибка загрузки</div>
+          <div className="text-2xs text-white/15 mb-3">{error}</div>
+          <button
+            type="button"
+            onClick={() => loadFunnel()}
+            className="text-craft-accent/70 hover:text-craft-accent text-2xs"
+          >
+            Повторить
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="bg-craft-surface border border-craft-border rounded-2xl p-5">
+        <h2 className="text-[13px] font-display font-medium tracking-tight mb-4">Воронка CRM</h2>
+        <div className="py-8 text-center text-[12px] text-white/20">Нет данных</div>
       </div>
     );
   }

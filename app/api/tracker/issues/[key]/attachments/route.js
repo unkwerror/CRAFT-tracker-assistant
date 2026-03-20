@@ -1,15 +1,17 @@
-import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/session.mjs';
+import { requireAuth, jsonOk, jsonError } from '@/lib/api-helpers.mjs';
 import { TrackerClient } from '@/lib/tracker.mjs';
 
 export async function GET(request, { params }) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
+  const { session } = auth;
 
   const key = params?.key;
-  if (!key) return NextResponse.json({ error: 'Issue key required' }, { status: 400 });
+  if (!key) return jsonError('Issue key required', 400);
 
   const tracker = new TrackerClient(session.tracker_token, process.env.TRACKER_ORG_ID);
+  if (!tracker.enabled) return jsonError('Tracker not configured', 503);
 
   try {
     const attachments = await tracker.getAttachments(key);
@@ -20,31 +22,37 @@ export async function GET(request, { params }) {
       mimetype: a.mimetype,
       createdAt: a.createdAt,
       createdBy: a.createdBy?.display,
+      downloadUrl: a.content || null,
     }));
-    return NextResponse.json({ attachments: normalized });
+    return jsonOk({ attachments: normalized });
   } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 502 });
+    console.error('Attachments GET error:', err.message);
+    return jsonError(err.message, 502);
   }
 }
 
 export async function POST(request, { params }) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
+  const { session } = auth;
 
   const key = params?.key;
-  if (!key) return NextResponse.json({ error: 'Issue key required' }, { status: 400 });
+  if (!key) return jsonError('Issue key required', 400);
 
   const tracker = new TrackerClient(session.tracker_token, process.env.TRACKER_ORG_ID);
+  if (!tracker.enabled) return jsonError('Tracker not configured', 503);
 
   try {
     const formData = await request.formData();
     const file = formData.get('file');
-    if (!file) return NextResponse.json({ error: 'File required' }, { status: 400 });
+    if (!file) return jsonError('File required', 400);
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const result = await tracker.uploadAttachment(key, file.name, buffer, file.type);
-    return NextResponse.json({ attachment: result }, { status: 201 });
+    return jsonOk({ attachment: result }, 201);
   } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 502 });
+    console.error('Attachments POST error:', err.message);
+    return jsonError(err.message, 502);
   }
 }

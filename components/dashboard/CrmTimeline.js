@@ -1,31 +1,58 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { ResponsiveLine } from '@nivo/line';
 import { motion } from 'framer-motion';
 import WidgetDebugBadge from './WidgetDebugBadge';
 
+async function readTrackerJson(r) {
+  let data = {};
+  try {
+    data = await r.json();
+  } catch {
+    /* non-JSON */
+  }
+  if (!r.ok) {
+    throw new Error(
+      data.error || (r.status === 503 ? 'Трекер не подключён' : `Ошибка ${r.status}`)
+    );
+  }
+  return data;
+}
+
 export default function CrmTimeline({ trackerConnected = false }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const chartWrapRef = useRef(null);
   const [chartWidth, setChartWidth] = useState(0);
 
-  useEffect(() => {
-    if (!trackerConnected) { setLoading(false); return; }
-
+  const loadEvents = useCallback(() => {
+    if (!trackerConnected) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
     fetch('/api/tracker/queues/CRM')
-      .then(r => r.json())
-      .then(d => {
+      .then(readTrackerJson)
+      .then((d) => {
         const tasks = d.tasks || [];
         const sorted = tasks
-          .filter(t => t.updatedAt)
+          .filter((t) => t.updatedAt)
           .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
           .slice(0, 20);
         setEvents(sorted);
       })
-      .catch(() => setEvents([]))
+      .catch((e) => {
+        setError(e.message);
+        setEvents([]);
+      })
       .finally(() => setLoading(false));
   }, [trackerConnected]);
+
+  useEffect(() => {
+    loadEvents();
+  }, [loadEvents]);
 
   useEffect(() => {
     if (!chartWrapRef.current || typeof ResizeObserver === 'undefined') return;
@@ -50,6 +77,22 @@ export default function CrmTimeline({ trackerConnected = false }) {
     return (
       <div className="bg-craft-surface border border-craft-border rounded-2xl p-8 flex justify-center">
         <div className="w-5 h-5 border-2 border-white/5 border-t-craft-cyan/40 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-craft-surface border border-craft-border rounded-2xl p-8 text-center">
+        <div className="text-craft-red/60 mb-2">Ошибка загрузки</div>
+        <div className="text-2xs text-white/15 mb-3">{error}</div>
+        <button
+          type="button"
+          onClick={() => loadEvents()}
+          className="text-craft-accent/70 hover:text-craft-accent text-2xs"
+        >
+          Повторить
+        </button>
       </div>
     );
   }

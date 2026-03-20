@@ -2,6 +2,21 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
+async function readTrackerJson(r) {
+  let data = {};
+  try {
+    data = await r.json();
+  } catch {
+    /* non-JSON */
+  }
+  if (!r.ok) {
+    throw new Error(
+      data.error || (r.status === 503 ? 'Трекер не подключён' : `Ошибка ${r.status}`)
+    );
+  }
+  return data;
+}
+
 const STATUS_COLORS = {
   open: { bg: 'bg-craft-accent/10', text: 'text-craft-accent', label: 'Открыта' },
   inProgress: { bg: 'bg-craft-orange/10', text: 'text-craft-orange', label: 'В работе' },
@@ -35,9 +50,8 @@ export default function QueueTasks({
     const query = params.toString();
     const url = query ? `/api/tracker/tasks?${query}` : '/api/tracker/tasks';
     fetch(url)
-      .then((r) => r.json())
+      .then(readTrackerJson)
       .then((data) => {
-        if (data.error) throw new Error(data.error);
         setTasks(Array.isArray(data.tasks) ? data.tasks : []);
         if (data.warning) setWarning(data.warning);
       })
@@ -139,7 +153,7 @@ function TaskRow({ task, index }) {
       href={task.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center gap-3 px-5 py-2.5 hover:bg-white/[0.02] transition-all duration-200 group block"
+      className="flex items-center gap-3 px-5 py-2.5 rounded-xl border border-transparent hover:border-white/[0.08] hover:shadow-[0_4px_18px_rgba(0,0,0,0.28)] hover:bg-white/[0.02] transition-[border-color,box-shadow,background-color] duration-200 ease-out group block"
     >
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5">

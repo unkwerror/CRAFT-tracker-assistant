@@ -1,24 +1,51 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ResponsiveHeatMap } from '@nivo/heatmap';
 import WidgetDebugBadge from './WidgetDebugBadge';
+
+async function readAnalyticsJson(r) {
+  let data = {};
+  try {
+    data = await r.json();
+  } catch {
+    /* non-JSON */
+  }
+  if (!r.ok) {
+    throw new Error(
+      data.error || (r.status === 503 ? 'Сервис недоступен' : `Ошибка ${r.status}`)
+    );
+  }
+  return data;
+}
 
 export default function LeadAging({ trackerConnected = false }) {
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    if (!trackerConnected) { setLoading(false); return; }
-
+  const loadLeads = useCallback(() => {
+    if (!trackerConnected) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
     fetch('/api/analytics/crm')
-      .then(r => r.json())
-      .then(d => {
+      .then(readAnalyticsJson)
+      .then((d) => {
         const anomalies = d.analytics?.anomalies || [];
         setLeads(anomalies);
       })
-      .catch(() => setLeads([]))
+      .catch((e) => {
+        setError(e.message);
+        setLeads([]);
+      })
       .finally(() => setLoading(false));
   }, [trackerConnected]);
+
+  useEffect(() => {
+    loadLeads();
+  }, [loadLeads]);
 
   if (!trackerConnected) {
     return (
@@ -32,6 +59,22 @@ export default function LeadAging({ trackerConnected = false }) {
     return (
       <div className="bg-craft-surface border border-craft-border rounded-2xl p-8 flex justify-center">
         <div className="w-5 h-5 border-2 border-white/5 border-t-craft-orange/40 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-craft-surface border border-craft-border rounded-2xl p-8 text-center">
+        <div className="text-craft-red/60 mb-2">Ошибка загрузки</div>
+        <div className="text-2xs text-white/15 mb-3">{error}</div>
+        <button
+          type="button"
+          onClick={() => loadLeads()}
+          className="text-craft-accent/70 hover:text-craft-accent text-2xs"
+        >
+          Повторить
+        </button>
       </div>
     );
   }

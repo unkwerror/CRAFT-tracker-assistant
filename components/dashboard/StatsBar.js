@@ -1,50 +1,80 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { animate, motion, useInView, useMotionValue, useTransform } from 'framer-motion';
+
+async function readTrackerJson(r) {
+  let data = {};
+  try {
+    data = await r.json();
+  } catch {
+    /* non-JSON */
+  }
+  if (!r.ok) {
+    throw new Error(
+      data.error || (r.status === 503 ? 'Трекер не подключён' : `Ошибка ${r.status}`)
+    );
+  }
+  return data;
+}
 
 export default function StatsBar({ trackerConnected = false }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const loadStats = useCallback(() => {
+    if (!trackerConnected) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    Promise.all([
+      fetch('/api/tracker/tasks').then(readTrackerJson),
+      fetch('/api/tracker/tasks?type=overdue').then(readTrackerJson),
+      fetch('/api/tracker/queues/CRM').then(readTrackerJson),
+    ])
+      .then(([myTasks, overdue, crm]) => {
+        const allMyTasks = myTasks.tasks || [];
+        const inProgress = allMyTasks.filter(t => t.statusKey === 'inProgress').length;
+        const total = allMyTasks.length;
+        const overdueCount = (overdue.tasks || []).length;
+        const crmTasks = crm.tasks || [];
+        const crmCount = crmTasks.length;
+
+        const crmByStatus = {};
+        for (const t of crmTasks) {
+          const sk = t.statusKey || 'unknown';
+          crmByStatus[sk] = (crmByStatus[sk] || 0) + 1;
+        }
+
+        const avgCycleDays = calcAvgCycle(crmTasks);
+        const wonCount = (crmByStatus.contract || 0) + (crmByStatus.projectOpened || 0);
+        const convRate = crmCount > 0 ? Math.round((wonCount / crmCount) * 100) : null;
+
+        const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
+        const recentLeads = crmTasks.filter(t => t.createdAt && new Date(t.createdAt) >= weekAgo).length;
+        const prevLeads = crmTasks.filter(t => {
+          if (!t.createdAt) return false;
+          const d = new Date(t.createdAt);
+          const twoWeeksAgo = new Date(); twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+          return d >= twoWeeksAgo && d < weekAgo;
+        }).length;
+
+        const leadsTrend = prevLeads > 0 ? Math.round(((recentLeads - prevLeads) / prevLeads) * 100) : null;
+
+        setStats({ total, inProgress, overdueCount, crmCount, crmByStatus, convRate, avgCycleDays, leadsTrend, recentLeads });
+      })
+      .catch((err) => {
+        setError(err.message);
+        setStats(null);
+      })
+      .finally(() => setLoading(false));
+  }, [trackerConnected]);
 
   useEffect(() => {
-    if (!trackerConnected) { setLoading(false); return; }
-
-    Promise.all([
-      fetch('/api/tracker/tasks').then(r => r.json()).catch(() => ({ tasks: [] })),
-      fetch('/api/tracker/tasks?type=overdue').then(r => r.json()).catch(() => ({ tasks: [] })),
-      fetch('/api/tracker/queues/CRM').then(r => r.json()).catch(() => ({ tasks: [], count: 0 })),
-    ]).then(([myTasks, overdue, crm]) => {
-      const allMyTasks = myTasks.tasks || [];
-      const inProgress = allMyTasks.filter(t => t.statusKey === 'inProgress').length;
-      const total = allMyTasks.length;
-      const overdueCount = (overdue.tasks || []).length;
-      const crmTasks = crm.tasks || [];
-      const crmCount = crmTasks.length;
-
-      const crmByStatus = {};
-      for (const t of crmTasks) {
-        const sk = t.statusKey || 'unknown';
-        crmByStatus[sk] = (crmByStatus[sk] || 0) + 1;
-      }
-
-      const avgCycleDays = calcAvgCycle(crmTasks);
-      const wonCount = (crmByStatus.contract || 0) + (crmByStatus.projectOpened || 0);
-      const convRate = crmCount > 0 ? Math.round((wonCount / crmCount) * 100) : null;
-
-      const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
-      const recentLeads = crmTasks.filter(t => t.createdAt && new Date(t.createdAt) >= weekAgo).length;
-      const prevLeads = crmTasks.filter(t => {
-        if (!t.createdAt) return false;
-        const d = new Date(t.createdAt);
-        const twoWeeksAgo = new Date(); twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-        return d >= twoWeeksAgo && d < weekAgo;
-      }).length;
-
-      const leadsTrend = prevLeads > 0 ? Math.round(((recentLeads - prevLeads) / prevLeads) * 100) : null;
-
-      setStats({ total, inProgress, overdueCount, crmCount, crmByStatus, convRate, avgCycleDays, leadsTrend, recentLeads });
-    }).finally(() => setLoading(false));
-  }, [trackerConnected]);
+    loadStats();
+  }, [loadStats]);
 
   if (!trackerConnected) {
     return (
@@ -69,6 +99,24 @@ export default function StatsBar({ trackerConnected = false }) {
             transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut', delay: i * 0.06 }}
           />
         ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="col-span-2 lg:col-span-5 bg-craft-surface border border-craft-border rounded-2xl p-8 text-center">
+          <div className="text-craft-red/60 mb-2">Ошибка загрузки</div>
+          <div className="text-2xs text-white/15 mb-3">{error}</div>
+          <button
+            type="button"
+            onClick={() => loadStats()}
+            className="text-craft-accent/70 hover:text-craft-accent text-2xs"
+          >
+            Повторить
+          </button>
+        </div>
       </div>
     );
   }

@@ -27,6 +27,7 @@ export async function POST(request) {
 
     return jsonOk({ success: true, operationId: result?.id, status: result?.status });
   } catch (err) {
+    console.error('Bulk tracker action error:', err.message);
     return jsonError(err.message, 502);
   }
 }

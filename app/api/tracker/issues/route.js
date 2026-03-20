@@ -1,6 +1,4 @@
-import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/session.mjs';
-import { hasPermission } from '@/lib/api-helpers.mjs';
+import { requireAuth, hasPermission, jsonOk, jsonError } from '@/lib/api-helpers.mjs';
 import { TrackerClient } from '@/lib/tracker.mjs';
 
 const QUEUE_WRITE_PERMISSION = {
@@ -8,27 +6,29 @@ const QUEUE_WRITE_PERMISSION = {
 };
 
 export async function POST(request) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
 
-  const body = await request.json();
-  const { queue, summary, description, type, priority, assignee, fields } = body;
-
-  if (!queue || !summary) {
-    return NextResponse.json({ error: 'queue and summary are required' }, { status: 400 });
-  }
-
-  const requiredPerm = QUEUE_WRITE_PERMISSION[queue.toUpperCase()];
-  if (requiredPerm) {
-    const hasPerm = await hasPermission(session, requiredPerm);
-    if (!hasPerm) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
+  const { session } = auth;
   const tracker = new TrackerClient(session.tracker_token, process.env.TRACKER_ORG_ID);
+  if (!tracker.enabled) return jsonError('Tracker not configured', 503);
 
   try {
+    const body = await request.json();
+    const { queue, summary, description, type, priority, assignee, fields } = body;
+
+    if (!queue || !summary) {
+      return jsonError('queue and summary are required', 400);
+    }
+
+    const requiredPerm = QUEUE_WRITE_PERMISSION[queue.toUpperCase()];
+    if (requiredPerm) {
+      const hasPerm = await hasPermission(session, requiredPerm);
+      if (!hasPerm) return jsonError('Forbidden', 403);
+    }
+
     const issue = await tracker.createIssue({ queue, summary, description, type, priority, assignee, fields });
-    return NextResponse.json({
+    return jsonOk({
       success: true,
       issue: {
         key: issue.key,
@@ -37,9 +37,9 @@ export async function POST(request) {
         statusKey: issue.status?.key,
         url: `https://tracker.yandex.ru/${issue.key}`,
       },
-    }, { status: 201 });
+    }, 201);
   } catch (error) {
     console.error('Issue creation error:', error.message);
-    return NextResponse.json({ error: error.message }, { status: 502 });
+    return jsonError(error.message, 502);
   }
 }

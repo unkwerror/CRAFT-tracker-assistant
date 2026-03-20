@@ -1,5 +1,20 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+
+async function readTrackerJson(r) {
+  let data = {};
+  try {
+    data = await r.json();
+  } catch {
+    /* non-JSON */
+  }
+  if (!r.ok) {
+    throw new Error(
+      data.error || (r.status === 503 ? 'Трекер не подключён' : `Ошибка ${r.status}`)
+    );
+  }
+  return data;
+}
 
 const AUDIT_TABS = [
   { id: 'no_deadline', label: 'Без дедлайна' },
@@ -11,25 +26,36 @@ export default function AuditWidget({ trackerConnected = false }) {
   const [tab, setTab] = useState('no_deadline');
   const [data, setData] = useState({});
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
+  const loadAudit = useCallback(() => {
     if (!trackerConnected) {
       setData({ no_deadline: [], stale: [], overdue: [] });
       setLoading(false);
       return;
     }
+    setLoading(true);
+    setError(null);
     Promise.all(
       AUDIT_TABS.map((t) =>
         fetch(`/api/tracker/tasks?type=${t.id}`)
-          .then((r) => r.json())
+          .then(readTrackerJson)
           .then((d) => ({ [t.id]: d.tasks || [] }))
-          .catch(() => ({ [t.id]: [] }))
       )
-    ).then((results) => {
-      setData(Object.assign({}, ...results));
-      setLoading(false);
-    });
+    )
+      .then((results) => {
+        setData(Object.assign({}, ...results));
+      })
+      .catch((e) => {
+        setError(e.message);
+        setData({ no_deadline: [], stale: [], overdue: [] });
+      })
+      .finally(() => setLoading(false));
   }, [trackerConnected]);
+
+  useEffect(() => {
+    loadAudit();
+  }, [loadAudit]);
 
   const items = data[tab] || [];
   const counts = {
@@ -58,6 +84,18 @@ export default function AuditWidget({ trackerConnected = false }) {
           </div>
           <div className="text-[13px] text-white/25 mb-1">Трекер не подключён</div>
           <div className="text-2xs text-white/15">Аудит задач станет доступен после подключения Трекера</div>
+        </div>
+      ) : error ? (
+        <div className="px-5 py-8 text-center">
+          <div className="text-craft-red/60 mb-2">Ошибка загрузки</div>
+          <div className="text-2xs text-white/15 mb-3">{error}</div>
+          <button
+            type="button"
+            onClick={() => loadAudit()}
+            className="text-craft-accent/70 hover:text-craft-accent text-2xs"
+          >
+            Повторить
+          </button>
         </div>
       ) : (
         <>

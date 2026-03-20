@@ -1,47 +1,104 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+
+async function readTrackerJson(r) {
+  let data = {};
+  try {
+    data = await r.json();
+  } catch {
+    /* non-JSON */
+  }
+  if (!r.ok) {
+    throw new Error(
+      data.error || (r.status === 503 ? 'Трекер не подключён' : `Ошибка ${r.status}`)
+    );
+  }
+  return data;
+}
+
+function aggregateFromProjTasks(tasks) {
+  const byComponent = {};
+  for (const t of tasks) {
+    const comp = t.components?.[0] || 'Без проекта';
+    if (!byComponent[comp]) {
+      byComponent[comp] = { name: comp, tasks: [], total: 0, closed: 0, overdue: 0, inProgress: 0 };
+    }
+    const g = byComponent[comp];
+    g.tasks.push(t);
+    g.total++;
+    if (t.statusKey === 'closed') g.closed++;
+    if (t.statusKey === 'inProgress') g.inProgress++;
+    if (t.deadline && new Date(t.deadline) < new Date() && t.statusKey !== 'closed') g.overdue++;
+  }
+
+  return Object.values(byComponent)
+    .map((g) => ({
+      ...g,
+      progress: g.total > 0 ? Math.round((g.closed / g.total) * 100) : 0,
+      status:
+        g.overdue > 0 ? 'at_risk' : g.inProgress > 0 ? 'on_track' : g.closed === g.total ? 'done' : 'on_track',
+    }))
+    .sort((a, b) => b.total - a.total);
+}
 
 export default function PortfolioSummary({ trackerConnected = false }) {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [fromProjectsApi, setFromProjectsApi] = useState(false);
 
-  useEffect(() => {
-    if (!trackerConnected) { setLoading(false); return; }
+  const loadProjects = useCallback(() => {
+    if (!trackerConnected) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
 
-    fetch('/api/tracker/queues/PROJ')
-      .then(r => r.json())
-      .then(data => {
+    (async () => {
+      try {
+        setFromProjectsApi(false);
+        const projRes = await fetch('/api/tracker/projects');
+        if (projRes.ok) {
+          const projData = await projRes.json().catch(() => ({}));
+          const list = Array.isArray(projData.projects) ? projData.projects : [];
+          if (list.length > 0) {
+            const result = list.map((p) => ({
+              name: p.name || p.display || p.summary || String(p.key || p.id || 'Проект'),
+              tasks: [],
+              total: 0,
+              closed: 0,
+              overdue: 0,
+              inProgress: 0,
+              progress: 0,
+              status: 'on_track',
+            }));
+            setProjects(result);
+            setFromProjectsApi(true);
+            return;
+          }
+        }
+
+        const data = await readTrackerJson(await fetch('/api/tracker/queues/PROJ'));
         const tasks = data.tasks || [];
         if (data.warning || tasks.length === 0) {
           setProjects([]);
           return;
         }
-
-        const byComponent = {};
-        for (const t of tasks) {
-          const comp = t.components?.[0] || 'Без проекта';
-          if (!byComponent[comp]) byComponent[comp] = { name: comp, tasks: [], total: 0, closed: 0, overdue: 0, inProgress: 0 };
-          const g = byComponent[comp];
-          g.tasks.push(t);
-          g.total++;
-          if (t.statusKey === 'closed') g.closed++;
-          if (t.statusKey === 'inProgress') g.inProgress++;
-          if (t.deadline && new Date(t.deadline) < new Date() && t.statusKey !== 'closed') g.overdue++;
-        }
-
-        const result = Object.values(byComponent)
-          .map(g => ({
-            ...g,
-            progress: g.total > 0 ? Math.round((g.closed / g.total) * 100) : 0,
-            status: g.overdue > 0 ? 'at_risk' : g.inProgress > 0 ? 'on_track' : g.closed === g.total ? 'done' : 'on_track',
-          }))
-          .sort((a, b) => b.total - a.total);
-
-        setProjects(result);
-      })
-      .catch(() => setProjects([]))
-      .finally(() => setLoading(false));
+        setProjects(aggregateFromProjTasks(tasks));
+      } catch (e) {
+        setError(e.message);
+        setProjects([]);
+        setFromProjectsApi(false);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [trackerConnected]);
+
+  useEffect(() => {
+    loadProjects();
+  }, [loadProjects]);
 
   const STATUS_STYLE = {
     on_track: { label: 'В графике', color: 'text-craft-green', dot: 'bg-craft-green' },
@@ -62,14 +119,28 @@ export default function PortfolioSummary({ trackerConnected = false }) {
         <div className="px-5 py-8 flex justify-center">
           <div className="w-5 h-5 border-2 border-white/5 border-t-white/20 rounded-full animate-spin" />
         </div>
+      ) : error ? (
+        <div className="px-5 py-8 text-center">
+          <div className="text-craft-red/60 mb-2">Ошибка загрузки</div>
+          <div className="text-2xs text-white/15 mb-3">{error}</div>
+          <button
+            type="button"
+            onClick={() => loadProjects()}
+            className="text-craft-accent/70 hover:text-craft-accent text-2xs"
+          >
+            Повторить
+          </button>
+        </div>
       ) : !trackerConnected ? (
         <div className="px-5 py-8 text-center">
           <div className="text-[13px] text-white/25 mb-1">Трекер не подключён</div>
         </div>
       ) : projects.length === 0 ? (
         <div className="px-5 py-8 text-center">
-          <div className="text-[13px] text-white/25 mb-1">Нет задач в PROJ</div>
-          <div className="text-2xs text-white/15">Создайте очередь PROJ в Трекере</div>
+          <div className="text-[13px] text-white/25 mb-1">Нет проектов</div>
+          <div className="text-2xs text-white/15">
+            {fromProjectsApi ? 'Список проектов Трекера пуст' : 'Создайте очередь PROJ в Трекере'}
+          </div>
         </div>
       ) : (
         <div className="divide-y divide-white/[0.04]">
@@ -86,7 +157,10 @@ export default function PortfolioSummary({ trackerConnected = false }) {
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="flex-1 h-1 bg-white/[0.04] rounded-full overflow-hidden">
-                    <div className="h-full rounded-full bg-craft-accent/40 transition-all duration-500" style={{ width: `${p.progress}%` }} />
+                    <div
+                      className="h-full rounded-full bg-craft-accent/40 transition-all duration-500"
+                      style={{ width: `${p.progress}%` }}
+                    />
                   </div>
                   <span className="text-2xs text-white/20 w-8 text-right">{p.progress}%</span>
                   <span className="text-2xs text-white/15">{p.closed}/{p.total}</span>

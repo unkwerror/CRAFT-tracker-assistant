@@ -1,14 +1,13 @@
 // ═══ /api/tracker/tasks — задачи из Яндекс Трекера ═══
 
-import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/session.mjs';
+import { requireAuth, jsonOk, jsonError } from '@/lib/api-helpers.mjs';
 import { TrackerClient, normalizeIssue } from '@/lib/tracker.mjs';
 
 export async function GET(request) {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
+  const { session } = auth;
 
   const { searchParams } = new URL(request.url);
   const queue = searchParams.get('queue');    // CRM, PROJ, DOCS, HR
@@ -17,6 +16,7 @@ export async function GET(request) {
   const assigneeMe = searchParams.get('assigneeMe') !== 'false'; // для CRM: false = все лиды
 
   const tracker = new TrackerClient(session.tracker_token, process.env.TRACKER_ORG_ID);
+  if (!tracker.enabled) return jsonError('Tracker not configured', 503);
 
   try {
     let tasks;
@@ -55,10 +55,10 @@ export async function GET(request) {
       }
       return t;
     });
-    return NextResponse.json({ tasks: normalized, count: normalized.length });
+    return jsonOk({ tasks: normalized, count: normalized.length });
 
   } catch (error) {
-    console.error('Tracker API error:', error.message);
-    return NextResponse.json({ error: error.message }, { status: 502 });
+    console.error('Tracker tasks error:', error.message);
+    return jsonError(error.message, 502);
   }
 }

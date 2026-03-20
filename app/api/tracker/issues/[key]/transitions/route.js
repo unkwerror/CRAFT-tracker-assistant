@@ -1,16 +1,18 @@
-import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/session.mjs';
+import { requireAuth, jsonOk, jsonError } from '@/lib/api-helpers.mjs';
 import { TrackerClient } from '@/lib/tracker.mjs';
 
 export async function GET(_request, { params }) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
+  const { session } = auth;
 
   const issueKey = params?.key;
-  if (!issueKey) return NextResponse.json({ error: 'Issue key required' }, { status: 400 });
+  if (!issueKey) return jsonError('Issue key required', 400);
 
   try {
     const tracker = new TrackerClient(session.tracker_token, process.env.TRACKER_ORG_ID);
+    if (!tracker.enabled) return jsonError('Tracker not configured', 503);
     const transitions = await tracker.getIssueTransitions(issueKey);
     const resolveToKey = (t) => {
       if (t?.to?.key) return t.to.key;
@@ -31,30 +33,33 @@ export async function GET(_request, { params }) {
       to: resolveToKey(t),
       toDisplay: resolveToDisplay(t),
     }));
-    return NextResponse.json({ transitions: normalized });
+    return jsonOk({ transitions: normalized });
   } catch (error) {
     console.error('Transitions error:', error.message);
-    return NextResponse.json({ error: error.message }, { status: 502 });
+    return jsonError(error.message, 502);
   }
 }
 
 export async function POST(request, { params }) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
+  const { session } = auth;
 
   const issueKey = params?.key;
-  if (!issueKey) return NextResponse.json({ error: 'Issue key required' }, { status: 400 });
+  if (!issueKey) return jsonError('Issue key required', 400);
 
   const { transitionId, comment } = await request.json();
-  if (!transitionId) return NextResponse.json({ error: 'transitionId is required' }, { status: 400 });
+  if (!transitionId) return jsonError('transitionId is required', 400);
 
   const tracker = new TrackerClient(session.tracker_token, process.env.TRACKER_ORG_ID);
+  if (!tracker.enabled) return jsonError('Tracker not configured', 503);
 
   try {
     const result = await tracker.executeTransition(issueKey, transitionId, comment);
-    return NextResponse.json({ success: true, issue: result });
+    return jsonOk({ success: true, issue: result });
   } catch (error) {
     console.error('Transition execution error:', error.message);
-    return NextResponse.json({ error: error.message }, { status: 502 });
+    return jsonError(error.message, 502);
   }
 }

@@ -31,6 +31,21 @@ function pct(v) {
   return `${Math.round(v)}%`;
 }
 
+async function readAnalyticsJson(r) {
+  let data = {};
+  try {
+    data = await r.json();
+  } catch {
+    /* non-JSON */
+  }
+  if (!r.ok) {
+    throw new Error(
+      data.error || (r.status === 503 ? 'Трекер не подключён' : `Ошибка ${r.status}`)
+    );
+  }
+  return data;
+}
+
 function Empty({ text = 'Нет данных' }) {
   return <div className="text-center py-8 text-2xs text-white/20">{text}</div>;
 }
@@ -60,9 +75,8 @@ export default function CrmAnalytics({ trackerConnected = false }) {
     const url = `/api/analytics/crm?${q.toString()}`;
     setFetchUrl(url);
     fetch(url)
-      .then((r) => r.json())
+      .then(readAnalyticsJson)
       .then((d) => {
-        if (d.error) throw new Error(d.error);
         setData(d || null);
       })
       .catch((e) => setError(e.message))
@@ -98,8 +112,15 @@ export default function CrmAnalytics({ trackerConnected = false }) {
   if (error) {
     return (
       <div className="bg-craft-surface border border-craft-border rounded-xl p-8 text-center">
-        <div className="text-craft-red/60 text-sm">Ошибка аналитики</div>
-        <div className="text-2xs text-white/20 mt-1">{error}</div>
+        <div className="text-craft-red/60 mb-2">Ошибка аналитики</div>
+        <div className="text-2xs text-white/15 mb-3">{error}</div>
+        <button
+          type="button"
+          onClick={() => { setError(null); setLoading(true); setCohort((c) => c); }}
+          className="text-craft-accent/70 hover:text-craft-accent text-2xs"
+        >
+          Повторить
+        </button>
       </div>
     );
   }

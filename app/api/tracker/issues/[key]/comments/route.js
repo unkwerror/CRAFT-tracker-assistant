@@ -1,15 +1,17 @@
-import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/session.mjs';
+import { requireAuth, jsonOk, jsonError } from '@/lib/api-helpers.mjs';
 import { TrackerClient } from '@/lib/tracker.mjs';
 
 export async function GET(request, { params }) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
+  const { session } = auth;
 
   const key = params?.key;
-  if (!key) return NextResponse.json({ error: 'Issue key required' }, { status: 400 });
+  if (!key) return jsonError('Issue key required', 400);
 
   const tracker = new TrackerClient(session.tracker_token, process.env.TRACKER_ORG_ID);
+  if (!tracker.enabled) return jsonError('Tracker not configured', 503);
 
   try {
     const comments = await tracker.getComments(key);
@@ -21,35 +23,40 @@ export async function GET(request, { params }) {
       createdBy: c.createdBy?.display || c.createdBy?.id,
       type: c.type,
     }));
-    return NextResponse.json({ comments: normalized });
+    return jsonOk({ comments: normalized });
   } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 502 });
+    console.error('Comments GET error:', err.message);
+    return jsonError(err.message, 502);
   }
 }
 
 export async function POST(request, { params }) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
+  const { session } = auth;
 
   const key = params?.key;
-  if (!key) return NextResponse.json({ error: 'Issue key required' }, { status: 400 });
+  if (!key) return jsonError('Issue key required', 400);
 
   const tracker = new TrackerClient(session.tracker_token, process.env.TRACKER_ORG_ID);
+  if (!tracker.enabled) return jsonError('Tracker not configured', 503);
 
   try {
     const { text, summonees } = await request.json();
-    if (!text?.trim()) return NextResponse.json({ error: 'Text required' }, { status: 400 });
+    if (!text?.trim()) return jsonError('Text required', 400);
 
     const comment = await tracker.addComment(key, text.trim(), summonees);
-    return NextResponse.json({
+    return jsonOk({
       comment: {
         id: comment.id,
         text: comment.text,
         createdAt: comment.createdAt,
         createdBy: comment.createdBy?.display,
       },
-    }, { status: 201 });
+    }, 201);
   } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 502 });
+    console.error('Comments POST error:', err.message);
+    return jsonError(err.message, 502);
   }
 }
