@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ROLE_DASHBOARD } from '@/lib/dashboard-config.mjs';
 import TasksWidget from './TasksWidget';
 import AuditWidget from './AuditWidget';
@@ -10,99 +10,137 @@ import TeamOnboarding from './TeamOnboarding';
 import SystemStatus from './SystemStatus';
 import WidgetPicker from './WidgetPicker';
 
-export const WIDGET_REGISTRY = {
-  my_tasks:          { title: 'Мои задачи',          desc: 'Задачи из Трекера, назначенные на вас',        size: 'half', minRole: null,       component: (p) => <TasksWidget title="Мои задачи" {...p} /> },
-  project_tasks:     { title: 'Задачи проектов',     desc: 'Все задачи ваших проектов',                    size: 'half', minRole: 'gip',      component: (p) => <TasksWidget title="Задачи проектов" {...p} /> },
-  crm_summary:       { title: 'CRM — лиды',          desc: 'Ваши лиды и сделки из CRM-очереди',            size: 'half', minRole: 'manager',  component: (p) => <TasksWidget title="CRM — мои лиды" {...p} /> },
-  portfolio_summary: { title: 'Портфель проектов',    desc: 'Обзор всех проектов бюро',                     size: 'full', minRole: 'director', component: (p) => <PortfolioSummary {...p} /> },
-  audit:             { title: 'Аудит качества',       desc: 'Без дедлайна, зависшие, просроченные',         size: 'full', minRole: 'gip',      component: (p) => <AuditWidget {...p} /> },
-  onboarding:        { title: 'Онбординг',            desc: 'Чеклист для новых сотрудников',                size: 'half', minRole: null,       component: (p) => <OnboardingWidget userId={p.userId} /> },
-  team_onboarding:   { title: 'Онбординг команды',    desc: 'Прогресс онбординга всех сотрудников',         size: 'full', minRole: 'exdir',    component: (p) => <TeamOnboarding /> },
-  quick_links:       { title: 'Быстрые ссылки',       desc: 'Ссылки на Трекер, доски, создание задач',      size: 'half', minRole: null,       component: (p) => <QuickLinks queues={p.queues} /> },
-  system_status:     { title: 'Статус системы',        desc: 'Подключения к Трекеру и БД',                   size: 'half', minRole: null,       component: (p) => <SystemStatus {...p} /> },
+// ── Component registry ──
+// Components live client-side, DB stores only keys.
+// Map: widget_key → { render, title, desc, size }
+const WIDGET_REGISTRY = {
+  my_tasks:          { render: (p) => <TasksWidget title="Мои задачи" {...p} />,        title: 'Мои задачи',        desc: 'Задачи из Трекера',                 size: 'half' },
+  project_tasks:     { render: (p) => <TasksWidget title="Задачи проектов" {...p} />,   title: 'Задачи проектов',   desc: 'Все задачи ваших проектов',         size: 'half' },
+  crm_widget:        { render: (p) => <TasksWidget title="CRM — лиды" {...p} />,        title: 'CRM — Воронка',     desc: 'Лиды и сделки из CRM',              size: 'full' },
+  crm_summary:       { render: (p) => <TasksWidget title="CRM — лиды" {...p} />,        title: 'CRM — лиды',        desc: 'Ваши лиды из CRM-очереди',          size: 'half' },
+  portfolio_summary: { render: (p) => <PortfolioSummary {...p} />,                       title: 'Портфель проектов', desc: 'Обзор всех проектов бюро',          size: 'full' },
+  audit:             { render: (p) => <AuditWidget {...p} />,                            title: 'Аудит качества',    desc: 'Без дедлайна, зависшие, просрочки', size: 'full' },
+  onboarding:        { render: (p) => <OnboardingWidget userId={p.userId} />,            title: 'Онбординг',         desc: 'Чеклист для новых сотрудников',     size: 'half' },
+  team_onboarding:   { render: ()  => <TeamOnboarding />,                                title: 'Онбординг команды', desc: 'Прогресс онбординга всех',          size: 'full' },
+  quick_links:       { render: (p) => <QuickLinks queues={p.queues} />,                  title: 'Быстрые ссылки',    desc: 'Ссылки на Трекер и доски',          size: 'half' },
+  system_status:     { render: (p) => <SystemStatus {...p} />,                           title: 'Статус системы',    desc: 'Подключения к Трекеру и БД',        size: 'half' },
 };
 
-const ROLE_LEVEL = { director: 5, exdir: 4, gip: 3, manager: 2, architect: 1, admin: 4 };
-const STORAGE_KEY = 'craft_dashboard_widgets';
-
-function loadWidgets(role) {
-  if (typeof window === 'undefined') return null;
-  try { const s = JSON.parse(localStorage.getItem(STORAGE_KEY)); return s?.[role] || null; } catch { return null; }
-}
-function saveWidgets(role, w) {
-  if (typeof window === 'undefined') return;
-  try { const s = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; s[role] = w; localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch {}
-}
+export { WIDGET_REGISTRY };
 
 export default function DashboardShell({ user }) {
   const role = user?.role || 'architect';
-  const config = ROLE_DASHBOARD[role] || ROLE_DASHBOARD.architect;
+  const fallback = ROLE_DASHBOARD[role] || ROLE_DASHBOARD.architect;
   const trackerConnected = !!user?.trackerConnected;
   const dbConnected = !!user?.dbConnected;
-  const userLevel = ROLE_LEVEL[role] || 1;
 
-  const [widgets, setWidgets] = useState(config.widgets);
+  const [widgets, setWidgets] = useState([]);
+  const [enabledKeys, setEnabledKeys] = useState([]);
   const [showPicker, setShowPicker] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [dragId, setDragId] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
 
+  // ── Load layout from DB ──
   useEffect(() => {
-    const stored = loadWidgets(role);
-    if (stored?.length > 0) setWidgets(stored);
-    requestAnimationFrame(() => requestAnimationFrame(() => setMounted(true)));
+    let cancelled = false;
+
+    fetch('/api/dashboard/layout')
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => {
+        if (cancelled) return;
+        const layout = data.layout || [];
+        const enabled = data.enabledKeys || [];
+        setWidgets(layout.length > 0 ? layout : (enabled.length > 0 ? enabled : fallback.widgets));
+        setEnabledKeys(enabled.length > 0 ? enabled : fallback.widgets);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setWidgets(fallback.widgets);
+        setEnabledKeys(fallback.widgets);
+      })
+      .finally(() => {
+        if (!cancelled) setLoaded(true);
+      });
+
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (!cancelled) setMounted(true);
+    }));
+
+    return () => { cancelled = true; };
   }, [role]);
 
-  const updateWidgets = useCallback((w) => { setWidgets(w); saveWidgets(role, w); }, [role]);
-  const resetWidgets = useCallback(() => { setWidgets(config.widgets); saveWidgets(role, config.widgets); }, [role, config.widgets]);
+  // ── Persist layout to DB (fire-and-forget) ──
+  const persistLayout = useCallback((layout) => {
+    fetch('/api/dashboard/layout', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ layout }),
+    }).catch(() => {});
+  }, []);
 
-  // ── Drag & Drop ──
-  const handleDragStart = (e, id) => {
+  const updateWidgets = useCallback((w) => {
+    setWidgets(w);
+    persistLayout(w);
+  }, [persistLayout]);
+
+  const resetWidgets = useCallback(() => {
+    const defaults = enabledKeys.length > 0 ? enabledKeys : fallback.widgets;
+    setWidgets(defaults);
+    persistLayout(defaults);
+  }, [enabledKeys, fallback.widgets, persistLayout]);
+
+  // ── Drag handlers ──
+  const onDragStart = (e, id) => {
     setDragId(id);
     e.dataTransfer.effectAllowed = 'move';
-    e.target.classList.add('dragging');
+    e.currentTarget.classList.add('dragging');
   };
-  const handleDragEnd = (e) => {
-    e.target.classList.remove('dragging');
+  const onDragEnd = (e) => {
+    e.currentTarget.classList.remove('dragging');
     setDragId(null);
     setDragOverId(null);
   };
-  const handleDragOver = (e, id) => {
+  const onDragOver = (e, id) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     if (id !== dragId) setDragOverId(id);
   };
-  const handleDrop = (e, targetId) => {
+  const onDrop = (e, targetId) => {
     e.preventDefault();
     if (!dragId || dragId === targetId) return;
-    const fromIdx = widgets.indexOf(dragId);
-    const toIdx = widgets.indexOf(targetId);
-    if (fromIdx < 0 || toIdx < 0) return;
+    const from = widgets.indexOf(dragId);
+    const to = widgets.indexOf(targetId);
+    if (from < 0 || to < 0) return;
     const next = [...widgets];
-    next.splice(fromIdx, 1);
-    next.splice(toIdx, 0, dragId);
+    next.splice(from, 1);
+    next.splice(to, 0, dragId);
     updateWidgets(next);
     setDragId(null);
     setDragOverId(null);
   };
 
-  const available = Object.entries(WIDGET_REGISTRY).filter(([, w]) => !w.minRole || userLevel >= (ROLE_LEVEL[w.minRole] || 0));
-  const widgetProps = { trackerConnected, dbConnected, userId: user?.id, queues: user?.queues || [] };
+  // ── Build picker list from enabled keys ──
+  const available = enabledKeys
+    .map(key => WIDGET_REGISTRY[key] ? [key, WIDGET_REGISTRY[key]] : null)
+    .filter(Boolean);
 
+  const widgetProps = { trackerConnected, dbConnected, userId: user?.id, queues: user?.queues || [] };
   const hour = new Date().getHours();
   const greet = hour < 6 ? 'Доброй ночи' : hour < 12 ? 'Доброе утро' : hour < 18 ? 'Добрый день' : 'Добрый вечер';
 
+  // ── Render ──
   return (
     <div className="min-h-screen pb-8">
-      {/* Header */}
       <header
         className="mb-5 opacity-0 -translate-y-2 transition-all duration-500"
         style={mounted ? { opacity: 1, transform: 'translateY(0)' } : {}}
       >
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-2xs uppercase tracking-[0.12em] text-white/20">{config.label}</span>
+          <span className="text-2xs uppercase tracking-[0.12em] text-white/20">{fallback.label}</span>
           <span className="text-white/8">/</span>
-          <span className="text-2xs text-white/12">{config.greeting}</span>
+          <span className="text-2xs text-white/12">{fallback.greeting}</span>
         </div>
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-display font-light tracking-tight">
@@ -115,15 +153,13 @@ export default function DashboardShell({ user }) {
             <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
               {showPicker
                 ? <path d="M4 4l8 8M12 4l-8 8" />
-                : <><line x1="8" y1="3" x2="8" y2="13" /><line x1="3" y1="8" x2="13" y2="8" /></>
-              }
+                : <><line x1="8" y1="3" x2="8" y2="13" /><line x1="3" y1="8" x2="13" y2="8" /></>}
             </svg>
             <span>{showPicker ? 'Закрыть' : 'Виджеты'}</span>
           </button>
         </div>
       </header>
 
-      {/* Picker */}
       <div className={`expand-section ${showPicker ? 'open' : ''} mb-5`}>
         <div>
           <WidgetPicker
@@ -136,41 +172,45 @@ export default function DashboardShell({ user }) {
         </div>
       </div>
 
-      {/* Widget grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        {widgets.map((id, i) => {
-          const w = WIDGET_REGISTRY[id];
-          if (!w) return null;
-          if (w.minRole && userLevel < (ROLE_LEVEL[w.minRole] || 0)) return null;
-          const isOver = dragOverId === id && dragId !== id;
+      {!loaded ? (
+        <div className="flex justify-center py-20">
+          <div className="w-6 h-6 border-2 border-white/5 border-t-white/20 rounded-full animate-spin" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          {widgets.map((id, i) => {
+            const w = WIDGET_REGISTRY[id];
+            if (!w) return null;
+            const isOver = dragOverId === id && dragId !== id;
 
-          return (
-            <div
-              key={id}
-              draggable
-              onDragStart={(e) => handleDragStart(e, id)}
-              onDragEnd={handleDragEnd}
-              onDragOver={(e) => handleDragOver(e, id)}
-              onDragLeave={() => setDragOverId(null)}
-              onDrop={(e) => handleDrop(e, id)}
-              className={`
-                ${w.size === 'full' ? 'lg:col-span-2' : ''}
-                transition-all duration-500 cursor-grab active:cursor-grabbing
-                ${isOver ? 'drag-over rounded-xl' : ''}
-              `}
-              style={{
-                opacity: mounted ? 1 : 0,
-                transform: mounted ? 'translateY(0)' : 'translateY(12px)',
-                transitionDelay: `${i * 60}ms`,
-              }}
-            >
-              {w.component(widgetProps)}
-            </div>
-          );
-        })}
-      </div>
+            return (
+              <div
+                key={id}
+                draggable
+                onDragStart={(e) => onDragStart(e, id)}
+                onDragEnd={onDragEnd}
+                onDragOver={(e) => onDragOver(e, id)}
+                onDragLeave={() => setDragOverId(null)}
+                onDrop={(e) => onDrop(e, id)}
+                className={`
+                  ${w.size === 'full' ? 'lg:col-span-2' : ''}
+                  transition-all duration-500 cursor-grab active:cursor-grabbing
+                  ${isOver ? 'drag-over rounded-xl' : ''}
+                `}
+                style={{
+                  opacity: mounted ? 1 : 0,
+                  transform: mounted ? 'translateY(0)' : 'translateY(12px)',
+                  transitionDelay: `${i * 60}ms`,
+                }}
+              >
+                {w.render(widgetProps)}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
-      {widgets.length === 0 && mounted && (
+      {loaded && widgets.length === 0 && mounted && (
         <div className="text-center py-24 animate-fadeIn">
           <div className="text-[13px] text-white/20 mb-3">Дашборд пуст</div>
           <button onClick={() => setShowPicker(true)} className="text-[13px] text-craft-accent/50 hover:text-craft-accent transition-colors duration-200">
