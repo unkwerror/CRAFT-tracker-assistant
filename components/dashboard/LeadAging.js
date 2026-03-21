@@ -1,6 +1,6 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
-import { ResponsiveHeatMap } from '@nivo/heatmap';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import CraftChart from '@/components/ui/CraftChart';
 import WidgetDebugBadge from './WidgetDebugBadge';
 
 async function readAnalyticsJson(r) {
@@ -16,6 +16,16 @@ async function readAnalyticsJson(r) {
     );
   }
   return data;
+}
+
+const AGE_BUCKETS = ['0-7д', '8-14д', '15-30д', '31-60д', '60д+'];
+
+function classifyAge(days) {
+  if (days <= 7) return 0;
+  if (days <= 14) return 1;
+  if (days <= 30) return 2;
+  if (days <= 60) return 3;
+  return 4;
 }
 
 export default function LeadAging({ trackerConnected = false }) {
@@ -46,6 +56,31 @@ export default function LeadAging({ trackerConnected = false }) {
   useEffect(() => {
     loadLeads();
   }, [loadLeads]);
+
+  const { stages, heatmapData, maxVal } = useMemo(() => {
+    const stageSet = [...new Set(leads.map((l) => l.status || 'Неизвестно'))].slice(0, 8);
+    const matrix = new Map();
+    for (const stage of stageSet) {
+      matrix.set(stage, new Array(AGE_BUCKETS.length).fill(0));
+    }
+    for (const lead of leads) {
+      const stage = lead.status || 'Неизвестно';
+      if (!matrix.has(stage)) continue;
+      const bucketIdx = classifyAge(Number(lead.daysSinceUpdate || 0));
+      matrix.get(stage)[bucketIdx] += 1;
+    }
+    const flat = [];
+    let max = 0;
+    const stageArr = [...matrix.keys()];
+    for (let si = 0; si < stageArr.length; si++) {
+      const row = matrix.get(stageArr[si]);
+      for (let bi = 0; bi < AGE_BUCKETS.length; bi++) {
+        flat.push([bi, si, row[bi]]);
+        if (row[bi] > max) max = row[bi];
+      }
+    }
+    return { stages: stageArr, heatmapData: flat, maxVal: max };
+  }, [leads]);
 
   if (!trackerConnected) {
     return (
@@ -79,6 +114,56 @@ export default function LeadAging({ trackerConnected = false }) {
     );
   }
 
+  const chartOption = {
+    grid: { top: 18, right: 14, bottom: 30, left: 80, containLabel: false },
+    xAxis: {
+      type: 'category',
+      data: AGE_BUCKETS,
+      splitArea: { show: false },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { fontSize: 10 },
+    },
+    yAxis: {
+      type: 'category',
+      data: stages,
+      splitArea: { show: false },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { fontSize: 10 },
+    },
+    visualMap: {
+      min: 0,
+      max: Math.max(maxVal, 1),
+      calculable: false,
+      show: false,
+      inRange: {
+        color: ['rgba(255,255,255,0.03)', 'rgb(var(--craft-orange))', 'rgb(var(--craft-red))'],
+      },
+    },
+    series: [
+      {
+        type: 'heatmap',
+        data: heatmapData,
+        label: { show: false },
+        emphasis: {
+          itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.5)' },
+        },
+        itemStyle: {
+          borderWidth: 2,
+          borderColor: 'rgb(var(--craft-surface))',
+          borderRadius: 3,
+        },
+      },
+    ],
+    tooltip: {
+      formatter: (params) => {
+        const [bIdx, sIdx, val] = params.data;
+        return `${stages[sIdx]}: ${AGE_BUCKETS[bIdx]} — <b>${val}</b> лидов`;
+      },
+    },
+  };
+
   return (
     <div className="bg-craft-surface border border-craft-border rounded-2xl overflow-hidden hover:border-craft-border2 transition-colors">
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-craft-border">
@@ -91,7 +176,7 @@ export default function LeadAging({ trackerConnected = false }) {
           endpoint="/api/analytics/crm"
           metrics={{
             anomalies: leads.length,
-            heatmapRows: buildHeatmapData(leads).length,
+            heatmapStages: stages.length,
           }}
           note="Используется analytics.anomalies из CRM analytics endpoint"
         />
@@ -105,32 +190,11 @@ export default function LeadAging({ trackerConnected = false }) {
       ) : (
         <div className="p-4 space-y-4">
           <div className="h-48 bg-craft-bg/35 rounded-lg border border-white/[0.06] overflow-hidden">
-            <ResponsiveHeatMap
-              data={buildHeatmapData(leads)}
-              margin={{ top: 18, right: 14, bottom: 30, left: 80 }}
-              axisTop={null}
-              axisRight={null}
-              axisBottom={{ tickSize: 0, tickPadding: 8, tickRotation: 0 }}
-              axisLeft={{ tickSize: 0, tickPadding: 6, tickRotation: 0 }}
-              enableLabels={false}
-              colors={{ type: 'diverging', scheme: 'red_yellow_blue', divergeAt: 0.9, minValue: 0, maxValue: 5 }}
-              emptyColor="rgba(255,255,255,0.03)"
-              borderColor={{ from: 'color', modifiers: [['darker', 0.3]] }}
-              theme={{
-                axis: { ticks: { text: { fill: 'rgba(255,255,255,0.3)', fontSize: 10 } } },
-                grid: { line: { stroke: 'rgba(255,255,255,0.05)', strokeWidth: 1 } },
-                tooltip: { container: { background: '#151515', color: '#ddd', fontSize: 11, border: '1px solid #2a2a2a' } },
-              }}
-              tooltip={({ cell }) => (
-                <div className="px-2 py-1 rounded bg-craft-surface border border-craft-border text-2xs text-white/70">
-                  {cell.serieId}: {cell.data.x} — {cell.value} лидов
-                </div>
-              )}
-            />
+            <CraftChart option={chartOption} style={{ height: '100%', width: '100%' }} />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {leads.slice(0, 8).map(lead => {
+            {leads.slice(0, 8).map((lead) => {
               const severity = lead.daysSinceUpdate > 30 ? 'critical' : lead.daysSinceUpdate > 14 ? 'warning' : 'info';
               const colors = {
                 critical: 'border-craft-red/30 bg-craft-red/5',
@@ -159,32 +223,4 @@ export default function LeadAging({ trackerConnected = false }) {
       )}
     </div>
   );
-}
-
-function buildHeatmapData(leads) {
-  const stages = [...new Set(leads.map((l) => l.status || 'Неизвестно'))].slice(0, 8);
-  const ageBuckets = ['0-7д', '8-14д', '15-30д', '31-60д', '60д+'];
-  const classify = (days) => {
-    if (days <= 7) return '0-7д';
-    if (days <= 14) return '8-14д';
-    if (days <= 30) return '15-30д';
-    if (days <= 60) return '31-60д';
-    return '60д+';
-  };
-  const matrix = new Map();
-  for (const stage of stages) {
-    const row = {};
-    for (const age of ageBuckets) row[age] = 0;
-    matrix.set(stage, row);
-  }
-  for (const lead of leads) {
-    const stage = lead.status || 'Неизвестно';
-    if (!matrix.has(stage)) continue;
-    const bucket = classify(Number(lead.daysSinceUpdate || 0));
-    matrix.get(stage)[bucket] += 1;
-  }
-  return [...matrix.entries()].map(([stage, row]) => ({
-    id: stage,
-    data: ageBuckets.map((age) => ({ x: age, y: row[age] })),
-  }));
 }

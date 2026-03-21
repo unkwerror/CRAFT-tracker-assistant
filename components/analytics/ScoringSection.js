@@ -31,6 +31,8 @@ function buildHistogram(scores) {
   return buckets;
 }
 
+// Fallback client-side labeling — used only when segment.label is absent
+// (e.g. old API response before backend auto-labeling was added in v2.8.0).
 function autoLabelSegment(seg, idx) {
   const budget = seg.avgBudget || 0;
   const age = seg.medianAge || 0;
@@ -170,7 +172,8 @@ export default function ScoringSection({ analytics, loading }) {
             {(segments.segments || []).map((seg, idx) => (
               <div key={seg.id} className="bg-craft-surface border border-craft-border rounded-xl p-4">
                 <div className="text-xs font-medium text-white/70 mb-3 leading-tight">
-                  {autoLabelSegment(seg, idx)}
+                  {seg.label || autoLabelSegment(seg, idx)}
+                  <span className="ml-1.5 text-craft-muted font-normal">({seg.count})</span>
                 </div>
                 <div className="space-y-1.5 text-xs">
                   <div className="flex justify-between">

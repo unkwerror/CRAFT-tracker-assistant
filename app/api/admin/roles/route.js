@@ -35,11 +35,11 @@ export async function PATCH(request) {
   const auth = await requireAdminWithDb();
   if (auth.error) return auth.error;
 
-  const { key, label, color, level, queues } = await request.json();
+  const { key, label, color, level, queues, permissions } = await request.json();
   if (!key) return jsonError('key is required');
 
   try {
-    const role = await updateRole(key, { label, color, level, queues });
+    const role = await updateRole(key, { label, color, level, queues, permissions });
     if (!role) return jsonError('Role not found', 404);
     await logAction(auth.session.uid, 'role_updated', 'role', key, null, { label, color, level });
     return jsonOk({ role });

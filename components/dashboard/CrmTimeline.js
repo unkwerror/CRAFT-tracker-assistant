@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ResponsiveLine } from '@nivo/line';
 import { motion } from 'framer-motion';
+import CraftChart from '@/components/ui/CraftChart';
 import WidgetDebugBadge from './WidgetDebugBadge';
 
 async function readTrackerJson(r) {
@@ -23,8 +23,6 @@ export default function CrmTimeline({ trackerConnected = false }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const chartWrapRef = useRef(null);
-  const [chartWidth, setChartWidth] = useState(0);
 
   const loadEvents = useCallback(() => {
     if (!trackerConnected) {
@@ -53,17 +51,6 @@ export default function CrmTimeline({ trackerConnected = false }) {
   useEffect(() => {
     loadEvents();
   }, [loadEvents]);
-
-  useEffect(() => {
-    if (!chartWrapRef.current || typeof ResizeObserver === 'undefined') return;
-    const node = chartWrapRef.current;
-    const observer = new ResizeObserver((entries) => {
-      const w = entries?.[0]?.contentRect?.width || 0;
-      setChartWidth(Math.round(w));
-    });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
 
   if (!trackerConnected) {
     return (
@@ -106,22 +93,47 @@ export default function CrmTimeline({ trackerConnected = false }) {
   }
 
   const pulseSeries = buildPulseSeries(events, 14);
-  const yMax = Math.max(...pulseSeries.map((p) => Number(p.value || 0)), 1);
-  const yTicks = buildYAxisTicks(yMax);
-  const isCompact = chartWidth > 0 && chartWidth < 420;
-  const xTickEvery = isCompact ? 3 : 2;
-  const xTickValues = pulseSeries
-    .filter((_, idx) => idx % xTickEvery === 0 || idx === pulseSeries.length - 1)
-    .map((p) => p.label);
-  const lineData = [
-    {
-      id: 'pulse',
-      data: pulseSeries.map((p) => ({
-        x: p.label,
-        y: p.value,
-      })),
+  const labels = pulseSeries.map((p) => p.label);
+  const values = pulseSeries.map((p) => p.value);
+
+  const chartOption = {
+    grid: { top: 14, right: 14, bottom: 32, left: 44, containLabel: false },
+    xAxis: {
+      type: 'category',
+      data: labels,
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: {
+        interval: Math.max(0, Math.floor(labels.length / 7) - 1),
+        fontSize: 10,
+      },
     },
-  ];
+    yAxis: {
+      type: 'value',
+      min: 0,
+      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } },
+      axisLabel: { fontSize: 10 },
+    },
+    series: [
+      {
+        type: 'line',
+        data: values,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 6,
+        lineStyle: { width: 2 },
+        areaStyle: { opacity: 0.18 },
+        itemStyle: { borderWidth: 1, borderColor: 'rgb(var(--craft-surface))' },
+      },
+    ],
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params) => {
+        const p = params[0];
+        return `${p.name}: <b>${p.value}</b> событий`;
+      },
+    },
+  };
 
   return (
     <div className="bg-craft-surface border border-craft-border rounded-2xl overflow-hidden hover:border-craft-border2 transition-colors">
@@ -136,59 +148,12 @@ export default function CrmTimeline({ trackerConnected = false }) {
           metrics={{
             sourceTasks: events.length,
             pulseDays: pulseSeries.length,
-            yMax,
-            chartWidth,
           }}
           note="Temporal Pulse строится из updatedAt последних CRM задач"
         />
         <div className="text-2xs text-white/25 mb-1.5">Temporal Pulse (активность по дням)</div>
-        <div ref={chartWrapRef} className="h-36 sm:h-40 bg-craft-bg/35 rounded-lg border border-white/[0.05] overflow-hidden">
-          <ResponsiveLine
-            data={lineData}
-            margin={{ top: 14, right: 14, bottom: 32, left: isCompact ? 34 : 44 }}
-            xScale={{ type: 'point' }}
-            yScale={{ type: 'linear', min: 0, max: yMax }}
-            colors={['#6DD8E0']}
-            lineWidth={2}
-            pointSize={isCompact ? 5 : 6}
-            pointColor="#6DD8E0"
-            pointBorderWidth={1}
-            pointBorderColor="#161616"
-            useMesh
-            enableGridX={false}
-            gridYValues={yTicks}
-            axisTop={null}
-            axisRight={null}
-            axisBottom={{
-              tickSize: 0,
-              tickPadding: 8,
-              tickRotation: 0,
-              tickValues: xTickValues,
-              format: (v) => String(v),
-            }}
-            axisLeft={{
-              tickSize: 0,
-              tickPadding: 6,
-              tickRotation: 0,
-              tickValues: yTicks,
-              format: (v) => `${v}`,
-            }}
-            enableSlices={false}
-            curve="monotoneX"
-            enableArea
-            areaOpacity={0.18}
-            theme={{
-              axis: { ticks: { text: { fill: 'rgba(255,255,255,0.32)', fontSize: isCompact ? 9 : 10 } } },
-              grid: { line: { stroke: 'rgba(255,255,255,0.06)', strokeWidth: 1 } },
-              crosshair: { line: { stroke: 'rgba(255,255,255,0.2)', strokeWidth: 1 } },
-              tooltip: { container: { background: '#151515', color: '#ddd', fontSize: 11, border: '1px solid #2a2a2a' } },
-            }}
-            tooltip={({ point }) => (
-              <div className="px-2 py-1 rounded bg-craft-surface border border-craft-border text-2xs text-white/70">
-                {point.data.xFormatted}: {point.data.yFormatted} событий
-              </div>
-            )}
-          />
+        <div className="h-36 sm:h-40 bg-craft-bg/35 rounded-lg border border-white/[0.05] overflow-hidden">
+          <CraftChart option={chartOption} style={{ height: '100%', width: '100%' }} />
         </div>
       </div>
 
@@ -262,14 +227,4 @@ function buildPulseSeries(events, days = 14) {
     const d = new Date(key);
     return { key, value, label: d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) };
   });
-}
-
-function buildYAxisTicks(maxValue) {
-  const max = Math.max(1, Math.ceil(maxValue));
-  const targetSteps = max <= 4 ? max : 4;
-  const step = Math.max(1, Math.ceil(max / targetSteps));
-  const out = [0];
-  for (let v = step; v <= max; v += step) out.push(v);
-  if (out[out.length - 1] !== max) out.push(max);
-  return out;
 }

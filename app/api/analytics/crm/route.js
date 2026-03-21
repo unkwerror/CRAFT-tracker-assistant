@@ -3,16 +3,9 @@ import { TrackerClient, normalizeIssue } from '@/lib/tracker.mjs';
 import {
   buildAnalyticsBundle,
   cohortAnalysis,
-  managerPerformance,
-  winLossAnalysis,
-  segmentLeads,
-  conversionByPeriod,
   calcVelocityFromChangelog,
-  trainConversionModel,
-  predictConversion,
-  trainScoringModel,
+  getOrTrainScoringModel,
   predictWithModel,
-  forecastTimeSeries,
 } from '@/lib/analytics.mjs';
 
 export async function GET(request) {
@@ -59,19 +52,9 @@ export async function GET(request) {
 
     if (withML) {
       try {
-        const convModel = trainConversionModel(leads);
-        if (convModel) {
-          const activeLeads = leads.filter(l =>
-            !['contract', 'projectOpened', 'rejected', 'closed'].includes(l.statusKey)
-          );
-          analytics.conversionPredictions = activeLeads.map(l => ({
-            key: l.key,
-            summary: l.summary,
-            prediction: predictConversion(convModel, l),
-          }));
-        }
-
-        const scoringModel = trainScoringModel(leads);
+        // LogReg (trainConversionModel) removed from API since v2.8.0 — see analytics.mjs §5.
+        // Random Forest scoring: served from 10-min in-memory cache via getOrTrainScoringModel.
+        const scoringModel = getOrTrainScoringModel(leads);
         if (scoringModel) {
           const activeLeads = leads.filter(l =>
             !['contract', 'projectOpened', 'rejected', 'closed'].includes(l.statusKey)
@@ -81,9 +64,10 @@ export async function GET(request) {
             summary: l.summary,
             mlPrediction: predictWithModel(scoringModel, l),
           }));
+        } else {
+          analytics.mlScores = null;
         }
       } catch {
-        analytics.conversionPredictions = null;
         analytics.mlScores = null;
       }
     }
