@@ -1,6 +1,18 @@
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { animate, motion, useInView, useMotionValue, useTransform } from 'framer-motion';
+import { AnimatePresence, animate, motion, useInView, useMotionValue, useTransform } from 'framer-motion';
+
+const CRM_STAGES = [
+  { key: 'newLead', label: 'Новый лид' },
+  { key: 'qualification', label: 'Квалификация' },
+  { key: 'proposal', label: 'КП отправлено' },
+  { key: 'negotiation', label: 'Переговоры' },
+  { key: 'contract', label: 'Договор' },
+  { key: 'projectOpened', label: 'Проект открыт' },
+];
+
+const INDUSTRY_BENCHMARK_DAYS = 45;
+const CONVERSION_PERIOD_DAYS = 30;
 
 async function readTrackerJson(r) {
   let data = {};
@@ -17,10 +29,74 @@ async function readTrackerJson(r) {
   return data;
 }
 
+function parseDate(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function isWonLead(task) {
+  return task?.statusKey === 'contract' || task?.statusKey === 'projectOpened';
+}
+
+function buildConversionTrend(tasks) {
+  const now = new Date();
+  const currentStart = new Date(now);
+  currentStart.setDate(currentStart.getDate() - CONVERSION_PERIOD_DAYS);
+  const previousStart = new Date(currentStart);
+  previousStart.setDate(previousStart.getDate() - CONVERSION_PERIOD_DAYS);
+
+  const currentPeriod = tasks.filter((task) => {
+    const stamp = parseDate(task.createdAt || task.updatedAt);
+    return stamp && stamp >= currentStart && stamp <= now;
+  });
+  const previousPeriod = tasks.filter((task) => {
+    const stamp = parseDate(task.createdAt || task.updatedAt);
+    return stamp && stamp >= previousStart && stamp < currentStart;
+  });
+
+  const currentWon = currentPeriod.filter(isWonLead).length;
+  const previousWon = previousPeriod.filter(isWonLead).length;
+  const currentRate = currentPeriod.length > 0 ? Math.round((currentWon / currentPeriod.length) * 100) : null;
+  const previousRate = previousPeriod.length > 0 ? Math.round((previousWon / previousPeriod.length) * 100) : null;
+
+  return {
+    currentRate,
+    previousRate,
+    delta:
+      currentRate != null && previousRate != null
+        ? currentRate - previousRate
+        : null,
+    currentWon,
+    previousWon,
+    currentTotal: currentPeriod.length,
+    previousTotal: previousPeriod.length,
+  };
+}
+
+function sortByDeadline(tasks) {
+  return [...tasks]
+    .filter((task) => parseDate(task.deadline))
+    .sort((left, right) => parseDate(left.deadline) - parseDate(right.deadline));
+}
+
+function formatDate(value) {
+  const parsed = parseDate(value);
+  if (!parsed) return '—';
+  return parsed.toLocaleDateString('ru-RU');
+}
+
+function daysUntil(value) {
+  const parsed = parseDate(value);
+  if (!parsed) return null;
+  return Math.ceil((parsed.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+}
+
 export default function StatsBar({ trackerConnected = false }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [expandedCard, setExpandedCard] = useState(null);
 
   const loadStats = useCallback(() => {
     if (!trackerConnected) {
@@ -38,7 +114,8 @@ export default function StatsBar({ trackerConnected = false }) {
         const allMyTasks = myTasks.tasks || [];
         const inProgress = allMyTasks.filter(t => t.statusKey === 'inProgress').length;
         const total = allMyTasks.length;
-        const overdueCount = (overdue.tasks || []).length;
+        const overdueTasks = overdue.tasks || [];
+        const overdueCount = overdueTasks.length;
         const crmTasks = crm.tasks || [];
         const crmCount = crmTasks.length;
 
@@ -52,18 +129,41 @@ export default function StatsBar({ trackerConnected = false }) {
         const wonCount = (crmByStatus.contract || 0) + (crmByStatus.projectOpened || 0);
         const convRate = crmCount > 0 ? Math.round((wonCount / crmCount) * 100) : null;
 
-        const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
         const recentLeads = crmTasks.filter(t => t.createdAt && new Date(t.createdAt) >= weekAgo).length;
         const prevLeads = crmTasks.filter(t => {
           if (!t.createdAt) return false;
           const d = new Date(t.createdAt);
-          const twoWeeksAgo = new Date(); twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+          const twoWeeksAgo = new Date();
+          twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
           return d >= twoWeeksAgo && d < weekAgo;
         }).length;
 
         const leadsTrend = prevLeads > 0 ? Math.round(((recentLeads - prevLeads) / prevLeads) * 100) : null;
+        const conversionTrend = buildConversionTrend(crmTasks);
+        const stageRows = CRM_STAGES.map((stage) => ({
+          ...stage,
+          count: crmByStatus[stage.key] || 0,
+        }));
 
-        setStats({ total, inProgress, overdueCount, crmCount, crmByStatus, convRate, avgCycleDays, leadsTrend, recentLeads });
+        setStats({
+          total,
+          inProgress,
+          overdueCount,
+          crmCount,
+          crmByStatus,
+          convRate,
+          avgCycleDays,
+          leadsTrend,
+          recentLeads,
+          myTasks: allMyTasks,
+          overdueTasks,
+          crmTasks,
+          stageRows,
+          conversionTrend,
+          industryBenchmarkDays: INDUSTRY_BENCHMARK_DAYS,
+        });
       })
       .catch((err) => {
         setError(err.message);
@@ -123,6 +223,7 @@ export default function StatsBar({ trackerConnected = false }) {
 
   const cards = [
     {
+      id: 'tasks',
       label: 'Мои задачи',
       value: stats?.total || 0,
       sub: `${stats?.inProgress || 0} в работе`,
@@ -131,6 +232,7 @@ export default function StatsBar({ trackerConnected = false }) {
       icon: <IconTasks />,
     },
     {
+      id: 'overdue',
       label: 'Просроченные',
       value: stats?.overdueCount || 0,
       sub: stats?.overdueCount === 0 ? 'Всё в порядке' : 'Требуют внимания',
@@ -139,6 +241,7 @@ export default function StatsBar({ trackerConnected = false }) {
       icon: <IconClock />,
     },
     {
+      id: 'crm',
       label: 'CRM лиды',
       value: stats?.crmCount || 0,
       sub: `${stats?.recentLeads || 0} за неделю`,
@@ -147,14 +250,16 @@ export default function StatsBar({ trackerConnected = false }) {
       icon: <IconFunnel />,
     },
     {
+      id: 'conversion',
       label: 'Конверсия',
       value: stats?.convRate != null ? `${stats.convRate}%` : '—',
       sub: 'В договор / проект',
       color: '#42C774',
-      trend: null,
+      trend: stats?.conversionTrend?.delta ?? null,
       icon: <IconChart />,
     },
     {
+      id: 'cycle',
       label: 'Цикл сделки',
       value: stats?.avgCycleDays != null ? `${stats.avgCycleDays}д` : '—',
       sub: 'Среднее время',
@@ -182,6 +287,8 @@ export default function StatsBar({ trackerConnected = false }) {
         <MorphMetricCard
           key={card.label}
           card={card}
+          expanded={expandedCard === card.id}
+          onClick={() => setExpandedCard((prev) => (prev === card.id ? null : card.id))}
           variants={{
             hidden: { opacity: 0, y: 12 },
             show: { opacity: 1, y: 0, transition: { duration: 0.32, ease: [0.16, 1, 0.3, 1] } },
@@ -190,15 +297,32 @@ export default function StatsBar({ trackerConnected = false }) {
           maskId={`metric-mask-${i}`}
         />
       ))}
+
+      <AnimatePresence initial={false} mode="wait">
+        {expandedCard && (
+          <motion.div
+            key={expandedCard}
+            layout
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            className="col-span-2 lg:col-span-5 rounded-2xl border border-craft-border bg-craft-surface/90 p-4"
+          >
+            <StatsAccordionDetails cardId={expandedCard} stats={stats} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
 
-function MorphMetricCard({ card, variants, pressure, maskId }) {
+function MorphMetricCard({ card, variants, pressure, maskId, expanded, onClick }) {
   const intensity = 0.22 + pressure * 0.78;
   const border = 16 - pressure * 6;
   return (
-    <motion.div
+    <motion.button
+      type="button"
       variants={variants}
       whileHover={{
         y: -4,
@@ -209,7 +333,13 @@ function MorphMetricCard({ card, variants, pressure, maskId }) {
         borderRadius: border,
         scale: 1 + pressure * 0.012,
       }}
-      className="group relative bg-craft-surface/90 border border-craft-border p-4 cursor-default overflow-hidden"
+      onClick={onClick}
+      aria-expanded={expanded}
+      className={`group relative border p-4 cursor-pointer overflow-hidden text-left ${
+        expanded
+          ? 'bg-craft-surface border-craft-accent/35 shadow-[0_0_0_1px_rgba(91,164,245,0.12)]'
+          : 'bg-craft-surface/90 border-craft-border'
+      }`}
     >
       <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
         <defs>
@@ -268,8 +398,180 @@ function MorphMetricCard({ card, variants, pressure, maskId }) {
           )}
         </div>
         <div className="text-[11px] text-white/20 mt-0.5">{card.sub}</div>
+        <div className="mt-3 text-2xs text-white/25">{expanded ? 'Свернуть детали' : 'Показать детали'}</div>
       </div>
-    </motion.div>
+    </motion.button>
+  );
+}
+
+function StatsAccordionDetails({ cardId, stats }) {
+  if (cardId === 'tasks') {
+    const nearestDeadlines = sortByDeadline(stats.myTasks)
+      .filter((task) => {
+        const delta = daysUntil(task.deadline);
+        return delta != null && delta >= 0;
+      })
+      .slice(0, 5);
+
+    return (
+      <div className="space-y-3">
+        <div>
+          <div className="text-sm font-medium text-white/80">Ближайшие дедлайны</div>
+          <div className="text-2xs text-white/25">Пять ближайших задач из персональной очереди</div>
+        </div>
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {nearestDeadlines.length > 0 ? nearestDeadlines.map((task) => (
+            <DetailRow
+              key={task.key}
+              title={task.summary}
+              subtitle={task.key}
+              meta={`${formatDate(task.deadline)} • ${daysUntil(task.deadline)} дн.`}
+            />
+          )) : (
+            <EmptyDetail text="Нет задач с будущим дедлайном" />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (cardId === 'overdue') {
+    const overdueItems = sortByDeadline(stats.overdueTasks).slice(0, 5);
+
+    return (
+      <div className="space-y-3">
+        <div>
+          <div className="text-sm font-medium text-white/80">Просроченные задачи</div>
+          <div className="text-2xs text-white/25">Топ-5 задач с самым ранним дедлайном</div>
+        </div>
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {overdueItems.length > 0 ? overdueItems.map((task) => {
+            const overdueDays = Math.abs(Math.min(daysUntil(task.deadline) || 0, 0));
+            return (
+              <DetailRow
+                key={task.key}
+                title={task.summary}
+                subtitle={task.key}
+                meta={`${formatDate(task.deadline)} • просрочено ${overdueDays} дн.`}
+                tone="danger"
+              />
+            );
+          }) : (
+            <EmptyDetail text="Просроченных задач нет" />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (cardId === 'crm') {
+    const total = Math.max(stats.crmCount || 0, 1);
+    return (
+      <div className="space-y-3">
+        <div>
+          <div className="text-sm font-medium text-white/80">Структура CRM-пайплайна</div>
+          <div className="text-2xs text-white/25">Распределение лидов по основным стадиям</div>
+        </div>
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {stats.stageRows.map((stage) => (
+            <DetailRow
+              key={stage.key}
+              title={stage.label}
+              subtitle={`${stage.count} лидов`}
+              meta={`${Math.round((stage.count / total) * 100)}% от CRM`}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (cardId === 'conversion') {
+    const trend = stats.conversionTrend;
+    return (
+      <div className="space-y-3">
+        <div>
+          <div className="text-sm font-medium text-white/80">Тренд конверсии</div>
+          <div className="text-2xs text-white/25">Сравнение последних {CONVERSION_PERIOD_DAYS} дней с предыдущим периодом</div>
+        </div>
+        <div className="grid gap-2 md:grid-cols-3">
+          <DetailMetric
+            label="Текущий период"
+            value={trend.currentRate != null ? `${trend.currentRate}%` : '—'}
+            note={`${trend.currentWon}/${trend.currentTotal} выигранных`}
+          />
+          <DetailMetric
+            label="Предыдущий период"
+            value={trend.previousRate != null ? `${trend.previousRate}%` : '—'}
+            note={`${trend.previousWon}/${trend.previousTotal} выигранных`}
+          />
+          <DetailMetric
+            label="Дельта"
+            value={trend.delta != null ? `${trend.delta > 0 ? '+' : ''}${trend.delta} п.п.` : '—'}
+            note="Считается по дате создания или обновления лида"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  const delta = stats.avgCycleDays != null ? stats.avgCycleDays - stats.industryBenchmarkDays : null;
+  return (
+    <div className="space-y-3">
+      <div>
+        <div className="text-sm font-medium text-white/80">Цикл сделки vs benchmark</div>
+        <div className="text-2xs text-white/25">Сравнение текущего среднего времени сделки с референсом по отрасли</div>
+      </div>
+      <div className="grid gap-2 md:grid-cols-3">
+        <DetailMetric
+          label="Текущий цикл"
+          value={stats.avgCycleDays != null ? `${stats.avgCycleDays} дн.` : '—'}
+          note="Считается по закрытым CRM-лидам"
+        />
+        <DetailMetric
+          label="Benchmark"
+          value={`${stats.industryBenchmarkDays} дн.`}
+          note="Практический ориентир для сервисной B2B-воронки"
+        />
+        <DetailMetric
+          label="Отклонение"
+          value={delta != null ? `${delta > 0 ? '+' : ''}${delta} дн.` : '—'}
+          note={delta == null ? 'Недостаточно закрытых сделок' : delta <= 0 ? 'Идёте быстрее benchmark' : 'Есть запас для сокращения цикла'}
+        />
+      </div>
+    </div>
+  );
+}
+
+function DetailRow({ title, subtitle, meta, tone = 'default' }) {
+  return (
+    <div className={`rounded-xl border px-3 py-3 ${
+      tone === 'danger'
+        ? 'border-craft-red/20 bg-craft-red/5'
+        : 'border-white/[0.06] bg-white/[0.03]'
+    }`}>
+      <div className="text-sm text-white/75 truncate">{title}</div>
+      <div className="text-2xs text-white/30 mt-1">{subtitle}</div>
+      <div className="text-2xs text-white/20 mt-2">{meta}</div>
+    </div>
+  );
+}
+
+function DetailMetric({ label, value, note }) {
+  return (
+    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-3">
+      <div className="text-2xs text-white/30">{label}</div>
+      <div className="mt-2 text-xl font-display text-white/80">{value}</div>
+      <div className="text-2xs text-white/20 mt-2">{note}</div>
+    </div>
+  );
+}
+
+function EmptyDetail({ text }) {
+  return (
+    <div className="rounded-xl border border-dashed border-white/[0.08] bg-white/[0.02] px-3 py-6 text-center text-2xs text-white/20 md:col-span-2 xl:col-span-3">
+      {text}
+    </div>
   );
 }
 

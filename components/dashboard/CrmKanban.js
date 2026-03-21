@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import WidgetDebugBadge from './WidgetDebugBadge';
 
@@ -21,6 +21,7 @@ const STATUS_MAP = {
 };
 
 const POLL_INTERVAL = 30_000;
+const STALE_DAYS = 14;
 
 async function readTrackerResponse(r) {
   let data = {};
@@ -44,6 +45,17 @@ function resolveColumn(task) {
   return null;
 }
 
+function getTaskActivityDate(task) {
+  return task.updatedAt || task.createdAt || null;
+}
+
+function isStuckTask(task) {
+  const stamp = getTaskActivityDate(task);
+  if (!stamp) return false;
+  const ageMs = Date.now() - new Date(stamp).getTime();
+  return ageMs >= STALE_DAYS * 24 * 60 * 60 * 1000;
+}
+
 export default function CrmKanban({ trackerConnected = false }) {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -51,6 +63,7 @@ export default function CrmKanban({ trackerConnected = false }) {
   const [selectedTask, setSelectedTask] = useState(null);
   const [toast, setToast] = useState(null);
   const [showNewLead, setShowNewLead] = useState(false);
+  const [filterMode, setFilterMode] = useState('all');
   const [dragState, setDragState] = useState({ taskKey: null, overCol: null, allowed: null });
   const transitionCache = useRef({});
   const pollRef = useRef(null);
@@ -168,10 +181,19 @@ export default function CrmKanban({ trackerConnected = false }) {
 
   // ─── Group tasks ───
 
+  const staleCount = useMemo(() => tasks.filter(isStuckTask).length, [tasks]);
+  const filteredTasks = useMemo(() => {
+    if (filterMode === 'stale') return tasks.filter(isStuckTask);
+    return tasks;
+  }, [tasks, filterMode]);
+  const visibleLeadLabel = filterMode === 'stale'
+    ? `${filteredTasks.length} из ${tasks.length} лидов`
+    : `${tasks.length} лидов`;
+
   const groups = {};
   COLUMNS.forEach(c => (groups[c.key] = []));
   const otherTasks = [];
-  tasks.forEach(t => {
+  filteredTasks.forEach(t => {
     const col = resolveColumn(t);
     if (col && groups[col]) groups[col].push(t);
     else otherTasks.push(t);
@@ -250,7 +272,7 @@ export default function CrmKanban({ trackerConnected = false }) {
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-craft-border">
         <h2 className="text-[13px] font-display font-medium tracking-tight">CRM — Воронка лидов</h2>
         <div className="flex items-center gap-2">
-          <span className="text-2xs text-white/25">{tasks.length} лидов</span>
+          <span className="text-2xs text-white/25">{visibleLeadLabel}</span>
           <motion.button
             onClick={handleExport}
             whileTap={{ scale: 0.97 }}
@@ -267,12 +289,36 @@ export default function CrmKanban({ trackerConnected = false }) {
           </motion.button>
         </div>
       </div>
+      <div className="px-5 pt-3 flex flex-wrap items-center gap-2">
+        {[
+          { key: 'all', label: 'Все', count: tasks.length },
+          { key: 'stale', label: 'Застрявшие', count: staleCount },
+        ].map((filter) => (
+          <button
+            key={filter.key}
+            type="button"
+            onClick={() => setFilterMode(filter.key)}
+            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-2xs transition-colors ${
+              filterMode === filter.key
+                ? 'border-craft-accent/40 bg-craft-accent/15 text-craft-accent'
+                : 'border-white/[0.08] bg-white/[0.03] text-white/45 hover:text-white/70 hover:bg-white/[0.06]'
+            }`}
+          >
+            <span>{filter.label}</span>
+            <span className="rounded-full bg-black/20 px-1.5 py-0.5 text-[10px]">{filter.count}</span>
+          </button>
+        ))}
+        {filterMode === 'stale' && (
+          <span className="text-2xs text-white/25">Без обновлений более {STALE_DAYS} дней</span>
+        )}
+      </div>
       <div className="px-4 pt-3">
         <WidgetDebugBadge
           title="CRM Kanban"
           endpoint="/api/tracker/queues/CRM + /api/tracker/issues/:key/transitions + /api/tracker/issues/:key/comments + /api/tracker/issues/:key/changelog + /api/tracker/issues/:key/attachments"
           metrics={{
             totalTasks: tasks.length,
+            visibleTasks: filteredTasks.length,
             mappedColumns: COLUMNS.length,
             otherTasks: otherTasks.length,
             selectedLead: selectedTask?.key || '—',
@@ -330,6 +376,11 @@ export default function CrmKanban({ trackerConnected = false }) {
                       onDragEnd={onDragEnd}
                     />
                   ))}
+                  {(groups[col.key] || []).length === 0 && (
+                    <div className="rounded-lg border border-dashed border-white/[0.08] bg-craft-bg/20 px-3 py-4 text-center text-2xs text-white/20">
+                      {filterMode === 'stale' ? 'Нет застрявших лидов' : 'Пусто'}
+                    </div>
+                  )}
                 </div>
               </motion.div>
             );

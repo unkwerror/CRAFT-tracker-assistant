@@ -1,42 +1,100 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import dynamic from 'next/dynamic';
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, KeyboardSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy, arrayMove, sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { ROLE_DASHBOARD } from '@/lib/dashboard-config.mjs';
+// Core widgets — always bundled
 import QueueTasks from './QueueTasks';
 import StatsBar from './StatsBar';
 import FunnelChart from './FunnelChart';
 import AuditWidget from './AuditWidget';
 import OnboardingWidget from './OnboardingWidget';
-import WidgetPicker from './WidgetPicker';
 import BrandIllustration from './BrandIllustration';
+import WidgetPickerModal from './WidgetPickerModal';
+// Extended widgets — lazy-loaded (only mounted when active on the board)
+const CrmKanban        = dynamic(() => import('./CrmKanban'),        { ssr: false });
+const CrmAnalytics     = dynamic(() => import('./CrmAnalytics'),     { ssr: false });
+const CrmTimeline      = dynamic(() => import('./CrmTimeline'),      { ssr: false });
+const LeadAging        = dynamic(() => import('./LeadAging'),        { ssr: false });
+const PortfolioSummary = dynamic(() => import('./PortfolioSummary'), { ssr: false });
+const QuickLinks       = dynamic(() => import('./QuickLinks'),       { ssr: false });
+const TeamOnboarding   = dynamic(() => import('./TeamOnboarding'),   { ssr: false });
+const SystemStatus     = dynamic(() => import('./SystemStatus'),     { ssr: false });
 
 /**
  * Widget registry: maps widget key → { render, title, desc, size }.
  * Keys must match the DB `widgets.key` column.
  */
+// Full widget registry — all 15 widgets available in the catalog.
+// Default dashboard layouts (ROLE_DASHBOARD) still show only the core 5;
+// users can add any of the 15 via the Widget Picker modal.
 const WIDGET_REGISTRY = {
+  // ── Core ──
   stats_bar: {
     render: (p) => <StatsBar trackerConnected={p.trackerConnected} />,
-    title: 'Сводка', desc: 'Ключевые метрики', size: 'full',
+    title: 'Сводка', desc: 'Ключевые метрики в реальном времени', size: 'full',
   },
   tasks_my: {
     render: (p) => <QueueTasks title="Мои задачи" trackerConnected={p.trackerConnected} emptyMessage="Нет активных задач" />,
-    title: 'Мои задачи', desc: 'Задачи из Трекера', size: 'half',
-  },
-  funnel_crm: {
-    render: (p) => <FunnelChart trackerConnected={p.trackerConnected} />,
-    title: 'Воронка CRM', desc: 'Визуализация воронки продаж', size: 'half',
+    title: 'Мои задачи', desc: 'Задачи из Трекера, назначенные на вас', size: 'half',
   },
   audit: {
     render: (p) => <AuditWidget {...p} />,
-    title: 'Аудит качества', desc: 'Без дедлайна, зависшие, просрочки', size: 'full',
+    title: 'Аудит качества', desc: 'Без дедлайна, зависшие, просроченные', size: 'full',
   },
   onboarding: {
     render: (p) => <OnboardingWidget userId={p.userId} useDb={p.dbConnected} />,
     title: 'Онбординг', desc: 'Чеклист для новых сотрудников', size: 'half',
+  },
+  // ── CRM ──
+  funnel_crm: {
+    render: (p) => <FunnelChart trackerConnected={p.trackerConnected} />,
+    title: 'Воронка CRM', desc: 'Визуализация воронки продаж', size: 'half',
+  },
+  kanban_crm: {
+    render: (p) => <CrmKanban trackerConnected={p.trackerConnected} />,
+    title: 'CRM — Воронка', desc: 'Канбан-доска CRM с drag-and-drop', size: 'full',
+  },
+  tasks_crm: {
+    render: (p) => <QueueTasks title="CRM — Лиды" queueKey="CRM" trackerConnected={p.trackerConnected} emptyMessage="Нет лидов" />,
+    title: 'CRM — Лиды', desc: 'Задачи из CRM-очереди', size: 'half',
+  },
+  crm_analytics: {
+    render: (p) => <CrmAnalytics trackerConnected={p.trackerConnected} />,
+    title: 'CRM Аналитика', desc: 'Скоринг, прогноз выручки, velocity, аномалии', size: 'full',
+  },
+  crm_timeline: {
+    render: (p) => <CrmTimeline trackerConnected={p.trackerConnected} />,
+    title: 'CRM — Лента', desc: 'Последние события CRM', size: 'half',
+  },
+  lead_aging: {
+    render: (p) => <LeadAging trackerConnected={p.trackerConnected} />,
+    title: 'Застрявшие лиды', desc: 'Лиды без обновлений', size: 'half',
+  },
+  // ── Проекты ──
+  tasks_proj: {
+    render: (p) => <QueueTasks title="Задачи проектов" queueKey="PROJ" trackerConnected={p.trackerConnected} emptyMessage="Нет задач в проектах" />,
+    title: 'Задачи проектов', desc: 'Задачи из PROJ-очереди', size: 'half',
+  },
+  portfolio_summary: {
+    render: (p) => <PortfolioSummary {...p} />,
+    title: 'Портфель проектов', desc: 'Обзор всех проектов бюро', size: 'full',
+  },
+  // ── Система ──
+  quick_links: {
+    render: (p) => <QuickLinks queues={p.queues} />,
+    title: 'Быстрые ссылки', desc: 'Ссылки на Трекер, доски, создание задач', size: 'half',
+  },
+  team_onboarding: {
+    render: () => <TeamOnboarding />,
+    title: 'Онбординг команды', desc: 'Прогресс онбординга всех сотрудников', size: 'full',
+  },
+  system_status: {
+    render: (p) => <SystemStatus {...p} />,
+    title: 'Статус системы', desc: 'Подключения к Трекеру и БД', size: 'half',
   },
 };
 
@@ -147,9 +205,8 @@ export default function DashboardShell({ user }) {
     });
   }, []);
 
-  const available = enabledKeys
-    .map(key => WIDGET_REGISTRY[key] ? [key, WIDGET_REGISTRY[key]] : null)
-    .filter(Boolean);
+  // Full catalog for the picker modal — all 15 entries regardless of role/DB
+  const catalog = Object.entries(WIDGET_REGISTRY);
 
   const widgetProps = { trackerConnected, dbConnected, userId: user?.id, queues: user?.queues || [] };
   const hour = new Date().getHours();
@@ -207,24 +264,15 @@ export default function DashboardShell({ user }) {
         </div>
       </motion.header>
 
-      <AnimatePresence initial={false}>
+      <AnimatePresence>
         {showPicker && (
-          <motion.div
-            key="picker"
-            initial={{ opacity: 0, height: 0, y: -6 }}
-            animate={{ opacity: 1, height: 'auto', y: 0 }}
-            exit={{ opacity: 0, height: 0, y: -6 }}
-            transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-            className="mb-5 overflow-hidden"
-          >
-            <WidgetPicker
-              available={available}
-              active={widgets}
-              onChange={updateWidgets}
-              onReset={resetWidgets}
-              onClose={() => setShowPicker(false)}
-            />
-          </motion.div>
+          <WidgetPickerModal
+            catalog={catalog}
+            active={widgets}
+            onApply={updateWidgets}
+            onReset={() => { resetWidgets(); setShowPicker(false); }}
+            onClose={() => setShowPicker(false)}
+          />
         )}
       </AnimatePresence>
 

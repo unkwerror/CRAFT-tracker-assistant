@@ -1,6 +1,6 @@
 {
   "name": "craft-tracker-assistant",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -15,6 +15,7 @@
     "@nivo/line": "^0.99.0",
     "@react-three/fiber": "^8.17.10",
     "@rive-app/react-canvas": "^4.27.2",
+    "@tanstack/react-virtual": "^3.13.23",
     "autoprefixer": "^10.4.27",
     "echarts": "^6.0.0",
     "echarts-for-react": "^3.0.6",

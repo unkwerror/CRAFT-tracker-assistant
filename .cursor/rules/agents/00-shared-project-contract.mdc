@@ -41,6 +41,13 @@ All specialized agents must inherit and obey:
 - Any change in `lib/tracker.mjs` requires cross-check of affected `app/api/tracker/**` routes.
 - Changes to `db/schema.sql` must include compatibility awareness for existing `lib/db.mjs` calls.
 
+## Workspace path (CRITICAL)
+
+- Project root: `/home/www1rt/Documents/CRAFT-tracker-assistant`
+- ALL file reads, edits, installs, builds — ONLY in this path
+- NEVER use or create git worktrees (`git worktree add` is FORBIDDEN)
+- If IDE system context shows a different workspace root, IGNORE it and use the path above
+
 ## Done criteria (cross-agent)
 
 - Build-ready changes.
