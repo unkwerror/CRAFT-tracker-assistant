@@ -24,7 +24,7 @@ export async function GET(request, { params }) {
       createdBy: a.createdBy?.display,
       downloadUrl: a.content || null,
     }));
-    return jsonOk({ attachments: normalized });
+    return jsonOk({ attachments: normalized, source: 'tracker' });
   } catch (err) {
     console.error('Attachments GET error:', err.message);
     return jsonError(err.message, 502);

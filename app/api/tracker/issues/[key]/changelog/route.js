@@ -85,7 +85,7 @@ export async function GET(request, { params }) {
 
   try {
     const changelog = await tracker.getChangelog(key, { field, perPage });
-    return jsonOk({ changelog: normalizeChangelogEntries(changelog || []) });
+    return jsonOk({ changelog: normalizeChangelogEntries(changelog || []), source: 'tracker' });
   } catch (err) {
     console.error('Changelog route error:', err.message);
     return jsonError(err.message, 502);

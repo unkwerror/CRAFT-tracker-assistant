@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTaskDrawer } from '@/hooks/useTaskDrawer';
 
 const QUEUES = [
   { key: 'all', label: 'Все задачи' },
@@ -29,6 +30,7 @@ async function fetchQueue(type, queue) {
 }
 
 export default function TasksPage() {
+  const { open: openDrawer } = useTaskDrawer();
   const [queue, setQueue] = useState('my');
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -121,7 +123,8 @@ export default function TasksPage() {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
-                className="flex items-center gap-3 px-4 py-3 rounded-lg bg-craft-surface/60 hover:bg-craft-surface transition-colors group"
+                onClick={() => openDrawer(task.key)}
+                className="flex items-center gap-3 px-4 py-3 rounded-lg bg-craft-surface/60 hover:bg-craft-surface transition-colors group cursor-pointer"
               >
                 <span className="text-xs text-craft-muted font-mono shrink-0">{task.key}</span>
                 <span className="text-sm flex-1 truncate">{task.summary}</span>
